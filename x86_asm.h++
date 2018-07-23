@@ -363,13 +363,14 @@ namespace codegen
 				return instr;
 			}
 
+			// TODO: move the relevant stuff from here to complex_operand
 			void encode(std::vector<byte> &code, const architecture &arch) const
 			{
 				if (arch.bits() >= 32 && r.log2bits() == 4 || arch.bits() == 16 && r.log2bits() == 5) code.push_back(0x66);
 				// TODO: address size prefix (0x67)
 				byte rex = get_rex();
 				if (rex) code.push_back(rex);
-				byte opcode = C; // basic_instruction<1, C>::encode(code, arch);
+				byte opcode = C;
 				if (dbit) opcode |= 2;
 				if (r.log2bits() > 3) opcode |= 1;
 				code.push_back(opcode);
