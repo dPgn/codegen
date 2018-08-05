@@ -16,15 +16,17 @@
 	limitations under the License.
 */
 
+namespace x86 = codegen::x86;
+
 TEST(X86Asm, PlainReturn)
 {
 	// Generate the assembler object
 	// The subarchitecture is, by default, the host architecture. This entire test should be
 	// disabled for non-x86 architectures when their support is added.
-	codegen::x86::assembler a;
+	x86::assembler a;
 
 	// Insert RET instruction
-	ASSERT_NO_THROW(a(codegen::x86::RET()));
+	ASSERT_NO_THROW(a(x86::RET()));
 
 	// Assemble
 	// A function_module<R(A...)> object encapsulates a non-linked function with a specific
@@ -51,21 +53,20 @@ TEST(X86Asm, PlainReturn)
 // Windows is actually not supported by the library, yet, but the calling convention is already
 // included here to avoid confusion when the support is eventually implemented.
 #ifdef _WIN32
-constexpr auto X = codegen::x86::RCX, Y = codegen::x86::RDX;
+constexpr auto X = x86::RCX, Y = x86::RDX;
 #else
-constexpr auto X = codegen::x86::RDI, Y = codegen::x86::RSI;
+constexpr auto X = x86::RDI, Y = x86::RSI;
 #endif
 
 template<class INSTR> std::int64_t test_basic_binary_instruction(std::int64_t x, std::int64_t y)
 {
-	codegen::x86::assembler a;
+	x86::assembler a;
 
 	// To make ADC and SBB different from ADD and SUB
-	a(codegen::x86::STC());
-
+	a(x86::STC());
 	a(INSTR(X, Y));
-	a(codegen::x86::MOV(codegen::x86::RAX, X));
-	a(codegen::x86::RET());
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
 
 	// Assemble, link, and execute
 	return a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link_function()(x, y);
@@ -73,45 +74,237 @@ template<class INSTR> std::int64_t test_basic_binary_instruction(std::int64_t x,
 
 TEST(X86Asm, BasicBinaryInstructions)
 {
-	EXPECT_EQ(55, test_basic_binary_instruction<codegen::x86::ADD>(13, 42));
-	EXPECT_EQ(47, test_basic_binary_instruction<codegen::x86::OR>(13, 42));
-	EXPECT_EQ(56, test_basic_binary_instruction<codegen::x86::ADC>(13, 42));
-	EXPECT_EQ(-30, test_basic_binary_instruction<codegen::x86::SBB>(13, 42));
-	EXPECT_EQ(8, test_basic_binary_instruction<codegen::x86::AND>(13, 42));
-	EXPECT_EQ(-29, test_basic_binary_instruction<codegen::x86::SUB>(13, 42));
-	EXPECT_EQ(39, test_basic_binary_instruction<codegen::x86::XOR>(13, 42));
+	EXPECT_EQ(55, test_basic_binary_instruction<x86::ADD>(13, 42));
+	EXPECT_EQ(47, test_basic_binary_instruction<x86::OR>(13, 42));
+	EXPECT_EQ(56, test_basic_binary_instruction<x86::ADC>(13, 42));
+	EXPECT_EQ(-30, test_basic_binary_instruction<x86::SBB>(13, 42));
+	EXPECT_EQ(8, test_basic_binary_instruction<x86::AND>(13, 42));
+	EXPECT_EQ(-29, test_basic_binary_instruction<x86::SUB>(13, 42));
+	EXPECT_EQ(39, test_basic_binary_instruction<x86::XOR>(13, 42));
 }
 
 TEST(X86Asm, AddressModes)
 {
 	std::int64_t n = 25;
 
-	codegen::x86::assembler a;
+	x86::assembler a;
 
-	a(codegen::x86::ADD(X, codegen::x86::DS[Y]));
-	a(codegen::x86::MOV(codegen::x86::RAX, X));
-	a(codegen::x86::RET());
+	a(x86::ADD(X, x86::DS[Y]));
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
 
 	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link_function()(17, &n)) << "Source = [Y]";
 
 	a.clear();
 
 	// xBP is a special case
-	a(codegen::x86::MOV(codegen::x86::RAX, codegen::x86::RBP));
-	a(codegen::x86::MOV(codegen::x86::RBP, Y));
-	a(codegen::x86::ADD(X, codegen::x86::DS[codegen::x86::RBP]));
-	a(codegen::x86::MOV(codegen::x86::RBP, codegen::x86::RAX));
-	a(codegen::x86::MOV(codegen::x86::RAX, X));
-	a(codegen::x86::RET());
+	a(x86::MOV(x86::RAX, x86::RBP));
+	a(x86::MOV(x86::RBP, Y));
+	a(x86::ADD(X, x86::DS[x86::RBP]));
+	a(x86::MOV(x86::RBP, x86::RAX));
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
 
 	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link_function()(17, &n)) << "Source = [RBP]";
 
 	a.clear();
 
-	a(codegen::x86::ADD(codegen::x86::DS[X], Y));
-	a(codegen::x86::RET());
+	// as is xSP (certainly)
+	a(x86::MOV(x86::RAX, x86::RSP));
+	a(x86::MOV(x86::RSP, Y));
+	a(x86::ADD(X, x86::DS[x86::RSP]));
+	a(x86::MOV(x86::RSP, x86::RAX));
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
+
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link_function()(17, &n)) << "Source = [RBP]";
+
+	a.clear();
+
+	// and R13
+	a(x86::MOV(x86::RAX, x86::R13));
+	a(x86::MOV(x86::R13, Y));
+	a(x86::ADD(X, x86::DS[x86::R13]));
+	a(x86::MOV(x86::R13, x86::RAX));
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
+
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link_function()(17, &n)) << "Source = [RBP]";
+
+	a.clear();
+
+	a(x86::ADD(x86::DS[X], Y));
+	a(x86::RET());
 
 	a.assemble_function<void(std::int64_t *, std::int64_t)>().link_function()(&n, 17);
 
 	ASSERT_EQ(42, n) << "Destination = [X]";
+
+	a.clear();
+
+	a(x86::SUB(X, 13));
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
+
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t)>().link_function()(55)) << "Source = Immediate";
+
+	a.clear();
+
+	a(x86::ADD(x86::DS.QWORD[X], 13));
+	a(x86::RET());
+
+	a.assemble_function<void(std::int64_t *)>().link_function()(&n);
+
+	ASSERT_EQ(55, n) << "Destination = [X], Source = Immediate";
+}
+
+template<class INSTR> bool test_branch(std::int64_t x, std::int64_t y)
+{
+	x86::assembler a;
+	x86::label yes(a);
+
+	a(x86::CMP(X, Y));
+	a(INSTR(yes));
+	a(x86::XOR(x86::RAX, x86::RAX));
+	a(x86::RET());
+	a(yes);
+	a(x86::MOV(x86::RAX, 1));
+	a(x86::RET());
+
+	return a.assemble_function<bool(std::int64_t, std::int64_t)>().link_function()(x, y);
+}
+
+TEST(X86Asm, Branches)
+{
+	ASSERT_TRUE(test_branch<x86::JE>(42, 42));
+	ASSERT_TRUE(test_branch<x86::JNE>(42, 13));
+	ASSERT_TRUE(test_branch<x86::JC>(42, -1));
+	ASSERT_TRUE(test_branch<x86::JNC>(42, 1));
+	ASSERT_TRUE(test_branch<x86::JB>(42, -1));
+	ASSERT_TRUE(test_branch<x86::JNB>(42, 1));
+	ASSERT_TRUE(test_branch<x86::JG>(42, 13));
+	ASSERT_FALSE(test_branch<x86::JG>(42, 42));
+	ASSERT_FALSE(test_branch<x86::JG>(13, 42));
+	ASSERT_TRUE(test_branch<x86::JGE>(42, 13));
+	ASSERT_TRUE(test_branch<x86::JGE>(42, 42));
+	ASSERT_FALSE(test_branch<x86::JGE>(13, 42));
+	ASSERT_TRUE(test_branch<x86::JL>(13, 42));
+	ASSERT_FALSE(test_branch<x86::JL>(42, 13));
+	ASSERT_TRUE(test_branch<x86::JLE>(13, 42));
+	ASSERT_TRUE(test_branch<x86::JLE>(42, 42));
+	ASSERT_FALSE(test_branch<x86::JLE>(42, 13));
+}
+
+TEST(X86Asm, JmpCall)
+{
+	x86::assembler a;
+	x86::label target(a);
+
+	a(x86::JMP(target));
+	a(x86::XOR(x86::RAX, x86::RAX));
+	a(x86::RET());
+	a(target);
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
+
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t)>().link_function()(42));
+
+	a.clear();
+
+	a(x86::CALL(target));
+	a(x86::XOR(x86::RAX, x86::RAX));
+	a(x86::RET());
+	a(target);
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
+
+	ASSERT_EQ(0, a.assemble_function<std::int64_t(std::int64_t)>().link_function()(42));
+}
+
+TEST(X86Asm, MulDiv)
+{
+	x86::assembler a;
+
+	a(x86::MOV(x86::RAX, X));
+	a(x86::MUL(Y));
+	a(x86::RET());
+
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link_function()(6, 7)) << "MUL Y";
+
+	a.clear();
+
+	a(x86::MOV(x86::RAX, X));
+	a(x86::IMUL(Y));
+	a(x86::RET());
+
+	ASSERT_EQ(69, a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link_function()(23, 3)) << "IMUL Y";
+
+	a.clear();
+
+	a(x86::IMUL(X, Y));
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
+
+	ASSERT_EQ(44, a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link_function()(4, 11)) << "IMUL X, Y";
+
+	a.clear();
+
+	a(x86::IMUL(x86::RAX, X, 42));
+	a(x86::RET());
+
+	ASSERT_EQ(420, a.assemble_function<std::int64_t(std::int64_t)>().link_function()(10)) << "IMUL EAX, X, 42";
+}
+
+template<class INSTR> std::uint64_t test_shift_imm3(std::uint64_t x)
+{
+	x86::assembler a;
+
+	a(x86::CLC());
+	a(INSTR(X, 3));
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
+
+	return a.assemble_function<std::uint64_t(std::uint64_t)>().link_function()(x);
+}
+
+TEST(X86Asm, Shifts)
+{
+	ASSERT_EQ(416, test_shift_imm3<x86::SHL>(52));
+	ASSERT_EQ(52, test_shift_imm3<x86::SHR>(416));
+	ASSERT_EQ(408, test_shift_imm3<x86::SAL>(51));
+	ASSERT_EQ(51, test_shift_imm3<x86::SAR>(408));
+	ASSERT_EQ(328, test_shift_imm3<x86::ROL>(41));
+	ASSERT_EQ(41, test_shift_imm3<x86::ROR>(328));
+	ASSERT_EQ(184, test_shift_imm3<x86::RCL>(23));
+	ASSERT_EQ(23, test_shift_imm3<x86::RCR>(184));
+
+	ASSERT_EQ(0, test_shift_imm3<x86::SHL>(0x2000000000000000ULL));
+	ASSERT_EQ(0, test_shift_imm3<x86::SHR>(1));
+	ASSERT_EQ(1, test_shift_imm3<x86::ROL>(0x2000000000000000ULL));
+	ASSERT_EQ(0x2000000000000000ULL, test_shift_imm3<x86::ROR>(1));
+
+	ASSERT_EQ(0x1fffffffffffffffULL, test_shift_imm3<x86::SHR>(0xffffffffffffffffULL));
+	ASSERT_EQ(0xffffffffffffffffULL, test_shift_imm3<x86::SAR>(0xffffffffffffffffULL));
+	ASSERT_EQ(0xfffffffffffffff8ULL, test_shift_imm3<x86::SHL>(0xffffffffffffffffULL));
+	ASSERT_EQ(0xffffffffffffffffULL, test_shift_imm3<x86::ROL>(0xffffffffffffffffULL));
+	ASSERT_EQ(0xfffffffffffffffbULL, test_shift_imm3<x86::RCL>(0xffffffffffffffffULL));
+	ASSERT_EQ(0xffffffffffffffffULL, test_shift_imm3<x86::ROR>(0xffffffffffffffffULL));
+	ASSERT_EQ(0xdfffffffffffffffULL, test_shift_imm3<x86::RCR>(0xffffffffffffffffULL));
+
+	x86::assembler a;
+
+	a(x86::MOV(x86::RCX, Y));
+	a(x86::SHL(X, x86::CL));
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
+
+	ASSERT_EQ(420, a.assemble_function<std::uint64_t(std::uint64_t, std::uint64_t)>().link_function()(105, 2));
+
+	a.clear();
+
+	a(x86::SHR(X, 1));
+	a(x86::MOV(x86::RAX, X));
+	a(x86::RET());
+
+	ASSERT_EQ(42, a.assemble_function<std::uint64_t(std::uint64_t)>().link_function()(84));
 }
