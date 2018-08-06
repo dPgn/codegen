@@ -293,12 +293,15 @@ TEST(X86Asm, Shifts)
 
 	x86::assembler a;
 
-	a(x86::MOV(x86::RCX, Y));
-	a(x86::SHL(X, x86::CL));
-	a(x86::MOV(x86::RAX, X));
+#	ifndef _WIN32
+	a(x86::MOV(x86::RCX, X));
+#	endif
+
+	a(x86::SHL(Y, x86::CL));
+	a(x86::MOV(x86::RAX, Y));
 	a(x86::RET());
 
-	ASSERT_EQ(420, a.assemble_function<std::uint64_t(std::uint64_t, std::uint64_t)>().link_function()(105, 2));
+	ASSERT_EQ(420, a.assemble_function<std::uint64_t(std::uint64_t, std::uint64_t)>().link_function()(2, 105));
 
 	a.clear();
 
@@ -307,4 +310,18 @@ TEST(X86Asm, Shifts)
 	a(x86::RET());
 
 	ASSERT_EQ(42, a.assemble_function<std::uint64_t(std::uint64_t)>().link_function()(84));
+}
+
+TEST(X86Asm, Data)
+{
+	x86::assembler a;
+	x86::global var;
+
+	a(x86::MOV(x86::RAX, x86::DS[var]));
+	a(x86::RET());
+	a.data();
+	a(var);
+	a(x86::DQ(123456));
+
+	ASSERT_EQ(123456, a.assemble_function<std::int64_t()>().link_function()());
 }

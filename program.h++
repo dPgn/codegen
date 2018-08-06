@@ -16,8 +16,8 @@
 	limitations under the License.
 */
 
-#ifndef CODEGEN_CODESEG_H
-#define CODEGEN_CODESEG_H
+#ifndef CODEGEN_PROGRAM_H
+#define CODEGEN_PROGRAM_H
 
 // Not tested, yet!
 // TODO: Test on Linux
@@ -36,6 +36,7 @@
 
 #ifdef CODEGEN_USE_MMAP
 #include <sys/mman.h>
+#include <unistd.h>
 #endif
 
 namespace codegen
@@ -45,11 +46,22 @@ namespace codegen
 	// TODO: facilitate data as a part of this (badly named) entity, as there is otherwise no
 	// portable way to guarantee that code and data are close enough to each other for shorter
 	// relative immediate offsets
-	class codeseg
+	class program
 	{
 		byte *_pages = nullptr;
-		std::size_t _size = 0;
+		std::size_t _text_size, _size = 0;
 		unsigned _refs = 1;
+
+		static std::size_t page_size()
+		{
+			static auto n = sysconf(_SC_PAGESIZE);
+			return n;
+		}
+
+		static std::size_t align(std::size_t p, std::size_t a = page_size())
+		{
+			return (p + page_size() - 1) & (~(std::size_t)0 - page_size() + 1);
+		}
 
 	public:
 
@@ -57,10 +69,13 @@ namespace codegen
 		{
 		};
 
-		codeseg(const std::vector<byte> &code, const std::function<void(byte *)> &reloc = [](byte *) {})
+		program(const std::vector<byte> &text, const std::vector<byte> &data, std::size_t bss_size,
+			const std::function<void(byte *, byte *, byte *)> &reloc = [](byte *, byte *, byte *) {})
 		{
-			if (code.empty()) return;
-			_size = code.size();
+			if (text.empty() && data.empty() && !bss_size) return;
+			_text_size = align(text.size());
+			std::size_t bss_index = _text_size + align(data.size(), 64); // TODO: non-hard-coded cache line alignment
+			_size = align(bss_index + bss_size);
 
 #		ifdef CODEGEN_USE_MMAP
 
@@ -68,20 +83,21 @@ namespace codegen
 			if (block == MAP_FAILED) throw exception();
 			_pages = (byte *)block;
 
-			std::copy(code.begin(), code.end(), _pages);
-			reloc(_pages);
+			std::copy(text.begin(), text.end(), _pages);
+			std::copy(data.begin(), data.end(), _pages + _text_size);
+			reloc(_pages, _pages + _text_size, _pages + bss_index);
 
-			if (mprotect(_pages, _size, PROT_READ | PROT_EXEC) == -1) throw exception();
+			if (mprotect(_pages, _text_size, PROT_READ | PROT_EXEC) == -1) throw exception();
 
 #		else
 
-#			error "No implementation of codegen::codeseg available."
+#			error "No implementation of codegen::program available."
 
 #		endif
 
 		}
 
-		virtual ~codeseg()
+		virtual ~program()
 		{
 
 #		ifdef CODEGEN_USE_MMAP

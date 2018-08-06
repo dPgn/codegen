@@ -27,7 +27,9 @@ namespace codegen
 	{
 	protected:
 
-		std::vector<byte> code;
+		std::vector<byte> _text;
+		std::vector<byte> _data;
+		std::size_t _bss_size;
 	};
 
 	template<class T> class function_module { };
@@ -39,14 +41,22 @@ namespace codegen
 
 		function_module() { }
 
-		function_module(const std::vector<byte> &content)
+		function_module(const std::vector<byte> &text, std::size_t bss_size = 0)
 		{
-			code = content;
+			_text = text;
+			_bss_size = bss_size;
+		}
+
+		function_module(const std::vector<byte> &text, const std::vector<byte> &data, std::size_t bss_size = 0)
+		{
+			_text = text;
+			_data = data;
+			_bss_size = bss_size;
 		}
 
 		function<R(A...)> link_function()
 		{
-			return function<R(A...)>(new codeseg(code));
+			return function<R(A...)>(new program(_text, _data, _bss_size));
 		}
 	};
 }

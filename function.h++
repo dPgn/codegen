@@ -19,7 +19,7 @@
 #ifndef CODEGEN_FUNCTION_H
 #define CODEGEN_FUNCTION_H
 
-#include "codeseg.h++"
+#include "program.h++"
 
 namespace codegen
 {
@@ -28,8 +28,8 @@ namespace codegen
 	// TODO: Rule of 5
 	template<class R, class... ARGS> class function<R(ARGS...)>
 	{
-		codeseg *code = nullptr;
-		std::size_t offset = 0;
+		program *_code = nullptr;
+		std::size_t _offset = 0;
 
 	public:
 
@@ -43,35 +43,35 @@ namespace codegen
 			*this = other;
 		}
 
-		function(codeseg *code = nullptr, std::size_t offset = 0)
+		function(program *code = nullptr, std::size_t offset = 0)
 		{
-			this->code = code;
-			this->offset = offset;
+			_code = code;
+			_offset = offset;
 		}
 
 		virtual ~function()
 		{
-			if (code) code->remove_ref();
+			if (_code) _code->remove_ref();
 		}
 
 		R operator()(ARGS... args)
 		{
-			return reinterpret_cast<R(*)(ARGS...)>((byte *)*code + offset)(args...);
+			return reinterpret_cast<R(*)(ARGS...)>((byte *)*_code + _offset)(args...);
 		}
 
 		function &operator=(const function &other)
 		{
-			code = other.code;
-			offset = other.offset;
-			code->add_ref();
+			_code = other._code;
+			_offset = other._offset;
+			_code->add_ref();
 			return *this;
 		}
 
 		function &operator=(function &&other)
 		{
-			code = other.code;
-			offset = other.offset;
-			other.code = nullptr;
+			_code = other._code;
+			_offset = other._offset;
+			other._code = nullptr;
 			return *this;
 		}
 	};
