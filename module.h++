@@ -25,39 +25,67 @@ namespace codegen
 {
 	class module
 	{
+	public:
+
+		struct reloc
+		{
+			unsigned _refs = 1;
+
+			virtual ~reloc() { }
+
+			virtual void resolve(std::map<std::intptr_t, byte *> &mapping, byte *text, byte *data, byte *bss) = 0;
+
+			virtual void write(byte *text, byte *data, std::map<std::intptr_t, byte *> &mapping) = 0;
+		};
+
 	protected:
 
 		std::vector<byte> _text;
 		std::vector<byte> _data;
 		std::size_t _bss_size;
-	};
-
-	template<class T> class function_module { };
-
-	template<class R, class... A> class function_module<R(A...)> : public module
-	{
+		reloc *_reloc = nullptr;
 
 	public:
 
-		function_module() { }
-
-		function_module(const std::vector<byte> &text, std::size_t bss_size = 0)
+		~module()
 		{
-			_text = text;
-			_bss_size = bss_size;
+			if (_reloc && !--_reloc->_refs) delete _reloc;
 		}
+	};
 
-		function_module(const std::vector<byte> &text, const std::vector<byte> &data, std::size_t bss_size = 0)
+	template<class T> struct linkable_module : module
+	{
+		linkable_module() { }
+
+		linkable_module(const std::vector<byte> &text, const std::vector<byte> &data, std::size_t bss_size = 0, module::reloc *reloc = nullptr)
 		{
 			_text = text;
 			_data = data;
 			_bss_size = bss_size;
+			if (_reloc = reloc) ++reloc->_refs;
 		}
 
-		function<R(A...)> link_function()
+		T link()
 		{
-			return function<R(A...)>(new program(_text, _data, _bss_size));
+			if (!_reloc) return T(new program(_text, _data, _bss_size));
+			auto reloc = [&](byte *text, byte *data, byte *bss)
+			{
+				std::map<std::intptr_t, byte *> mapping;
+				_reloc->resolve(mapping, text, data, bss);
+				_reloc->write(text, data, mapping);
+			};
+			return T(new program(_text, _data, _bss_size, reloc));
 		}
+	};
+
+	template<class T> class function_module { };
+
+	template<class R, class... A> struct function_module<R(A...)> : linkable_module<function<R(A...)>>
+	{
+		function_module() { }
+
+		function_module(const std::vector<byte> &text, const std::vector<byte> &data, std::size_t bss_size = 0, module::reloc *reloc = nullptr)
+			: linkable_module<function<R(A...)>>(text, data, bss_size, reloc) { }
 	};
 }
 

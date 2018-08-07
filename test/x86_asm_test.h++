@@ -39,7 +39,7 @@ TEST(X86Asm, PlainReturn)
 	// do not reference any external symbols. It effectively copies the assembled code as it is
 	// into a valid codeseg and wrapped into a valid callable function<R(A...)> object.
 	codegen::function<void()> fun;
-	ASSERT_NO_THROW(fun = code.link_function());
+	ASSERT_NO_THROW(fun = code.link());
 
 	// Run the runnable function
 	// We make a death test here, because, if the code above fails, calling fun() will most likely
@@ -69,7 +69,7 @@ template<class INSTR> std::int64_t test_basic_binary_instruction(std::int64_t x,
 	a(x86::RET());
 
 	// Assemble, link, and execute
-	return a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link_function()(x, y);
+	return a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link()(x, y);
 }
 
 TEST(X86Asm, BasicBinaryInstructions)
@@ -93,7 +93,7 @@ TEST(X86Asm, AddressModes)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link_function()(17, &n)) << "Source = [Y]";
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link()(17, &n)) << "Source = [Y]";
 
 	a.clear();
 
@@ -105,7 +105,7 @@ TEST(X86Asm, AddressModes)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link_function()(17, &n)) << "Source = [RBP]";
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link()(17, &n)) << "Source = [RBP]";
 
 	a.clear();
 
@@ -117,7 +117,7 @@ TEST(X86Asm, AddressModes)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link_function()(17, &n)) << "Source = [RBP]";
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link()(17, &n)) << "Source = [RBP]";
 
 	a.clear();
 
@@ -129,14 +129,14 @@ TEST(X86Asm, AddressModes)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link_function()(17, &n)) << "Source = [RBP]";
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link()(17, &n)) << "Source = [RBP]";
 
 	a.clear();
 
 	a(x86::ADD(x86::DS[X], Y));
 	a(x86::RET());
 
-	a.assemble_function<void(std::int64_t *, std::int64_t)>().link_function()(&n, 17);
+	a.assemble_function<void(std::int64_t *, std::int64_t)>().link()(&n, 17);
 
 	ASSERT_EQ(42, n) << "Destination = [X]";
 
@@ -146,14 +146,14 @@ TEST(X86Asm, AddressModes)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t)>().link_function()(55)) << "Source = Immediate";
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t)>().link()(55)) << "Source = Immediate";
 
 	a.clear();
 
 	a(x86::ADD(x86::DS.QWORD[X], 13));
 	a(x86::RET());
 
-	a.assemble_function<void(std::int64_t *)>().link_function()(&n);
+	a.assemble_function<void(std::int64_t *)>().link()(&n);
 
 	ASSERT_EQ(55, n) << "Destination = [X], Source = Immediate";
 }
@@ -171,7 +171,7 @@ template<class INSTR> bool test_branch(std::int64_t x, std::int64_t y)
 	a(x86::MOV(x86::RAX, 1));
 	a(x86::RET());
 
-	return a.assemble_function<bool(std::int64_t, std::int64_t)>().link_function()(x, y);
+	return a.assemble_function<bool(std::int64_t, std::int64_t)>().link()(x, y);
 }
 
 TEST(X86Asm, Branches)
@@ -207,7 +207,7 @@ TEST(X86Asm, JmpCall)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t)>().link_function()(42));
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t)>().link()(42));
 
 	a.clear();
 
@@ -218,7 +218,7 @@ TEST(X86Asm, JmpCall)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	ASSERT_EQ(0, a.assemble_function<std::int64_t(std::int64_t)>().link_function()(42));
+	ASSERT_EQ(0, a.assemble_function<std::int64_t(std::int64_t)>().link()(42));
 }
 
 TEST(X86Asm, MulDiv)
@@ -229,7 +229,7 @@ TEST(X86Asm, MulDiv)
 	a(x86::MUL(Y));
 	a(x86::RET());
 
-	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link_function()(6, 7)) << "MUL Y";
+	ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link()(6, 7)) << "MUL Y";
 
 	a.clear();
 
@@ -237,7 +237,7 @@ TEST(X86Asm, MulDiv)
 	a(x86::IMUL(Y));
 	a(x86::RET());
 
-	ASSERT_EQ(69, a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link_function()(23, 3)) << "IMUL Y";
+	ASSERT_EQ(69, a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link()(23, 3)) << "IMUL Y";
 
 	a.clear();
 
@@ -245,14 +245,14 @@ TEST(X86Asm, MulDiv)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	ASSERT_EQ(44, a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link_function()(4, 11)) << "IMUL X, Y";
+	ASSERT_EQ(44, a.assemble_function<std::int64_t(std::int64_t, std::int64_t)>().link()(4, 11)) << "IMUL X, Y";
 
 	a.clear();
 
 	a(x86::IMUL(x86::RAX, X, 42));
 	a(x86::RET());
 
-	ASSERT_EQ(420, a.assemble_function<std::int64_t(std::int64_t)>().link_function()(10)) << "IMUL EAX, X, 42";
+	ASSERT_EQ(420, a.assemble_function<std::int64_t(std::int64_t)>().link()(10)) << "IMUL EAX, X, 42";
 }
 
 template<class INSTR> std::uint64_t test_shift_imm3(std::uint64_t x)
@@ -264,7 +264,7 @@ template<class INSTR> std::uint64_t test_shift_imm3(std::uint64_t x)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	return a.assemble_function<std::uint64_t(std::uint64_t)>().link_function()(x);
+	return a.assemble_function<std::uint64_t(std::uint64_t)>().link()(x);
 }
 
 TEST(X86Asm, Shifts)
@@ -301,7 +301,7 @@ TEST(X86Asm, Shifts)
 	a(x86::MOV(x86::RAX, Y));
 	a(x86::RET());
 
-	ASSERT_EQ(420, a.assemble_function<std::uint64_t(std::uint64_t, std::uint64_t)>().link_function()(2, 105));
+	ASSERT_EQ(420, a.assemble_function<std::uint64_t(std::uint64_t, std::uint64_t)>().link()(2, 105));
 
 	a.clear();
 
@@ -309,7 +309,7 @@ TEST(X86Asm, Shifts)
 	a(x86::MOV(x86::RAX, X));
 	a(x86::RET());
 
-	ASSERT_EQ(42, a.assemble_function<std::uint64_t(std::uint64_t)>().link_function()(84));
+	ASSERT_EQ(42, a.assemble_function<std::uint64_t(std::uint64_t)>().link()(84));
 }
 
 TEST(X86Asm, Data)
@@ -323,5 +323,15 @@ TEST(X86Asm, Data)
 	a(var);
 	a(x86::DQ(123456));
 
-	ASSERT_EQ(123456, a.assemble_function<std::int64_t()>().link_function()());
+	codegen::function_module<std::int64_t()> module;
+	try
+	{
+ 		module = a.assemble_function<std::int64_t()>();
+	}
+	catch (x86::argument_mismatch ex)
+	{
+		std::cout << "Argument mismatch: " << ex.msg() << std::endl;
+	}
+
+	ASSERT_EQ(123456, module.link()());
 }

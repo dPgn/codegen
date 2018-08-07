@@ -27,10 +27,27 @@ namespace codegen
 	{
 		class exception
 		{
+			const std::string _msg;
+
+		protected:
+
+			exception() { }
+
+			exception(const std::string &msg) : _msg(msg) { }
+
+		public:
+
+			std::string msg() const
+			{
+				return _msg;
+			}
 		};
 
 		class argument_mismatch : public exception
 		{
+		public:
+
+			argument_mismatch(const std::string &msg) : exception(msg) { }
 		};
 
 		struct model
@@ -164,7 +181,11 @@ namespace codegen
 		static constexpr integer_reg R14L(3, 14);
 		static constexpr integer_reg R15L(3, 15);
 
-		struct not_a_label : exception
+		struct not_markable : exception
+		{
+		};
+
+		struct not_global : exception
 		{
 		};
 
@@ -176,7 +197,14 @@ namespace codegen
 
 		struct symbol : operand
 		{
+			virtual ~symbol() { }
+
 			virtual std::int64_t addr() const = 0;
+
+			virtual bool is_known() const
+			{
+				return true;
+			}
 
 			virtual bool is_relative() const = 0;
 
@@ -184,10 +212,15 @@ namespace codegen
 
 			virtual void mark(assembler &a)
 			{
-				throw not_a_label();
+				throw not_markable();
 			}
 
 			virtual symbol *clone() const = 0;
+
+			virtual std::intptr_t id() const
+			{
+				throw not_global();
+			}
 		};
 
 		template<class T> class immediate : public symbol
@@ -219,30 +252,58 @@ namespace codegen
 			}
 		};
 
-		class global : public symbol
+		// This structure is far from space efficient. Maybe some day.
+		struct reloc : module::reloc
 		{
-			std::int32_t _addr;
-
-		public:
-
-			std::int64_t addr() const
+			struct entry
 			{
-				return _addr;
+				std::size_t _index;
+				std::intptr_t _id;
+				bool _relative;
+				byte _nbytes;
+			};
+
+			std::map<std::intptr_t, symbol *> _symbols;
+
+			std::map<std::intptr_t, std::size_t> _text_globals, _data_globals, _bss_globals;
+			std::vector<entry> _entries[2];
+
+			~reloc()
+			{
+				for (auto sym : _symbols) delete sym.second;
 			}
 
- 			bool is_relative() const // what was the point of this, again?
+			void resolve(std::map<std::intptr_t, byte *> &mapping, byte *text, byte *data, byte *bss)
 			{
-				return true;
+				for (auto i : _text_globals) mapping[i.first] = text + i.second;
+				for (auto i : _data_globals) mapping[i.first] = data + i.second;
+				for (auto i : _bss_globals) mapping[i.first] = bss + i.second;
 			}
 
-			byte nbytes() const
+			void write(byte *text, byte *data, std::map<std::intptr_t, byte *> &mapping)
 			{
-				return 4;
+				for (int i = 0; i < 2; ++i) for (auto entry : _entries[i])
+				{
+					auto addr = reinterpret_cast<std::int64_t>(mapping[entry._id]);
+					if (entry._relative) addr -= reinterpret_cast<std::int64_t>(text) + entry._index;
+					unsigned carry = 0;
+					for (byte j = 0; j < entry._nbytes; ++j)
+					{
+						byte *b = (i? data : text) + entry._index + j;
+						unsigned x = (addr & 0xff) + *b + carry;
+						*b = x;
+						carry = x >> 8;
+						addr >>= 8;
+					}
+				}
 			}
 
-			symbol *clone() const
+			void add(int section, std::size_t index, symbol *sym, bool relative, byte nbytes)
 			{
-				return nullptr; // TODO: !!!!!
+				auto id = sym->id();
+				auto symit = _symbols.lower_bound(index);
+				if (symit->first != id) _symbols.insert(--symit, std::pair<std::intptr_t, symbol *>(id, sym));
+				_entries[section].push_back(entry { index, id, relative, nbytes });
 			}
 		};
 
@@ -260,6 +321,19 @@ namespace codegen
 			byte _log2bits;
 
 			symbol *_displacement = nullptr;
+
+			void copy_from(const reg_mem &other)
+			{
+				_index = other._index;
+				_index_log2bits = other._index_log2bits;
+				_index_shift = other._index_shift;
+				_base = other._base;
+				_base_log2bits = other._base_log2bits;
+				_has_index = other._has_index;
+				_has_base = other._has_base;
+				_indirect = other._indirect;
+				_log2bits = other._log2bits;;
+			}
 
 		public:
 
@@ -319,7 +393,41 @@ namespace codegen
 				_has_index = false;
 				_has_base = false;
 				_log2bits = width;
+				_indirect = true;
 				_displacement = displacement->clone();
+			}
+
+			reg_mem(const reg_mem &other)
+			{
+				copy_from(other);
+				if (other._displacement) _displacement = other._displacement->clone();
+			}
+
+			reg_mem(reg_mem &&other)
+			{
+				copy_from(other);
+				_displacement = other._displacement;
+				other._displacement = nullptr;
+			}
+
+			~reg_mem()
+			{
+				if (_displacement) delete _displacement;
+			}
+
+			reg_mem &operator=(const reg_mem &other)
+			{
+				copy_from(other);
+				if (_displacement) delete _displacement;
+				if (other._displacement) _displacement = other._displacement->clone();
+			}
+
+			reg_mem &operator=(reg_mem &&other)
+			{
+				copy_from(other);
+				if (_displacement) delete _displacement;
+				_displacement = other._displacement;
+				other._displacement = nullptr;
 			}
 
 			bool is_indirect() const
@@ -329,14 +437,14 @@ namespace codegen
 
 			bool has_sib() const
 			{
-				return _indirect && (_index_shift || _has_base || _has_index && _index == 12);
+				return _indirect && (_has_base || _has_index && (_index == 12 || _index_shift));
 			}
 
 			byte modrm() const
 			{
 				if (!_indirect) return 0xc0 | _index & 7;
 				byte nbytes = _displacement? _displacement->nbytes() : 0;
-				if (nbytes > 4) throw argument_mismatch(); // TODO: better exception
+				if (nbytes > 4) throw "TODO!!! Instructions with 64 bit displacement";
 				if (has_sib())
 				{
 					if (nbytes > 1) return 0x84;
@@ -356,11 +464,21 @@ namespace codegen
 				return  n? n : _has_index && (_index & 7) == 5? 1 : 0;
 			}
 
-			void write_displacement(std::vector<byte> &code, const model &m) const
+			void write_sib_and_displacement(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
+				if (has_sib()) code.push_back(sib());
 				auto b = displacement_bytes();
 				if (!b) return;
-				auto addr = _displacement? _displacement->addr() : 0;
+				std::int64_t addr = 0;
+				if (rel && _displacement)
+				{
+					addr = _displacement->addr();
+					if (!_displacement->is_known())
+					{
+						addr -= b;
+						rel->add(section, code.size(), _displacement, !_has_base && !_has_index, b);
+					}
+				}
 				for (byte i = 0; i < b; ++i) code.push_back((addr >> i * 8) & 0xff);
 			}
 
@@ -564,13 +682,13 @@ namespace codegen
 		{
 			virtual instruction *clone() const = 0;
 
-			virtual void encode(std::vector<byte> &code, const model &m) const = 0;
+			virtual void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const = 0;
 
 			virtual std::size_t length(const model &m) const
 			{
 				// TODO: override in derived classes to do this more efficiently
 				std::vector<byte> temp;
-				encode(temp, m);
+				encode(temp, 0, nullptr, m);
 				return temp.size();
 			}
 		};
@@ -599,7 +717,7 @@ namespace codegen
 				return new basic_instruction();
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				code.insert(code.end(), std::begin(seq), std::end(seq));
 			}
@@ -645,7 +763,7 @@ namespace codegen
 				return  _k == 3? 1 : 2;
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				if (_k == 3) // use INT3 as a shorter encoding for INT 3 like "real" assemblers
 				{
@@ -707,7 +825,7 @@ namespace codegen
 				return instr;
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				byte log2bits = _reg_imm.is_immediate()? _reg_mem.log2bits() : _reg_imm.log2bits();
 				if (m._bits != 16 && log2bits == 4) code.push_back(0x66);
@@ -717,8 +835,10 @@ namespace codegen
 				if (rex) code.push_back(rex);
 				if (_reg_imm.is_immediate())
 				{
-					if (immbytes > 4) throw argument_mismatch();
-					if (immbytes > 1 << _reg_mem.log2bits() - 3) throw argument_mismatch();
+					if (immbytes > 4) throw "TODO!!! Instructions with 64 bit immediate argument";
+
+					if (immbytes > 1 << _reg_mem.log2bits() - 3)
+						throw argument_mismatch("Immediate wider than the operation itself");
 					if (!_reg_mem.is_indirect() && !_reg_mem.reg_index() && (_reg_mem.log2bits() < 5 || immbytes > 1)) // the shorter encodings for xAX
 					{
 						code.push_back(_opcode | 4 | (_reg_mem.log2bits() == 3? 1 : 0));
@@ -746,12 +866,12 @@ namespace codegen
 				}
 				else
 				{
-					if (!_reg_mem.is_indirect() && _reg_mem.log2bits() != _reg_imm.log2bits()) throw argument_mismatch();
+					if (!_reg_mem.is_indirect() && _reg_mem.log2bits() != _reg_imm.log2bits())
+						throw argument_mismatch("Register arguments of different widths");
 					code.push_back(_reg_imm.log2bits() == 3? _opcode : _opcode | 1);
 					code.push_back(modrm);
 				}
-				if (_reg_mem.has_sib()) code.push_back(_reg_mem.sib());
-				_reg_mem.write_displacement(code, m);
+				_reg_mem.write_sib_and_displacement(code, section, rel, m);
 				_reg_imm.write_immediate(code, m, immbytes);
 			}
 		};
@@ -787,7 +907,7 @@ namespace codegen
 				return new data_instruction(*_data);
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				for (unsigned i = 0; i < sizeof(T); ++i) code.push_back((_data->addr() >> i * 8) & 0xff);
 			}
@@ -800,51 +920,92 @@ namespace codegen
 
 		class assembler
 		{
-			// This is actually an overkill, as labels cannot work locally over section boundaries,
-			// since we don't know where the linker will put them.
 			struct section
 			{
+				// only relevant to code, but here, for now, to avoid need for two versions of compute_global_addresses
+				std::map<std::size_t, model> _model = { { 0, model() } };
+
 				std::vector<instruction *> _code;
+
+				std::map<std::size_t, std::intptr_t> _globals;
+
+				virtual void clear()
+				{
+					for (auto i : _code) delete i;
+					_code.clear();
+					_globals.clear();
+
+					_model.clear();
+					_model[0] = model();
+				}
+
+				void compute_global_addresses(std::map<std::intptr_t, std::size_t> &addr)
+				{
+					auto sym = _globals.begin();
+					for (std::size_t i = 0, pos = 0; i < _code.size() && sym != _globals.end(); ++i)
+					{
+						auto nm = _model.begin(), m = nm++;
+						if (nm != _model.end() && nm->first <= i) m = nm++;
+						// TODO: align here
+						if (sym->first == i)
+						{
+							addr[sym->second] = pos;
+							++sym;
+						}
+						pos += _code[i]->length(m->second);
+					}
+				}
+			}
+			_data, _bss;
+
+			struct text_section : section
+			{
 				std::map<std::size_t, std::size_t> _label2pos;
 				std::map<std::size_t, std::size_t> _pos2label;
 
 				void clear()
 				{
-					for (auto i : _code) delete i;
-					_code.clear();
+					section::clear();
+
 					_pos2label.clear();
 					_label2pos.clear();
-				}
 			}
-			_text, _data, _bss;
 
-			section *_section = &_text;
+				std::map<std::size_t, std::size_t> _label2addr;
 
-			std::map<std::size_t, model> _model = { { 0, model() } };
-			std::size_t _next_label_index = 0;
-
-			std::map<std::size_t, std::size_t> _label2addr;
-
-			void compute_label_addresses()
-			{
-				// TODO: there are certainly more efficient ways to do this
-				std::size_t prev = 1, total;
-				_label2addr.clear();
-				for (total = 0; total != prev; prev = total)
+				void compute_label_addresses()
 				{
-					auto label = _text._pos2label.begin();
-					auto nm = _model.begin(), m = nm++;
-					for (std::size_t i = 0; i < _text._code.size() && label != _text._pos2label.end(); ++i)
+					// TODO: there are certainly more efficient ways to do this
+					std::size_t prev = 1, total;
+					_label2addr.clear();
+					for (total = 0; total != prev; prev = total)
 					{
-						if (nm != _model.end() && nm->first <= i) m = nm++;
-						// TODO: align here
-						if (i == label->first) _label2addr[label++->second] = total;
-						total += _text._code[i]->length(m->second);
+						auto label = _pos2label.begin();
+						auto nm = _model.begin(), m = nm++;
+						for (std::size_t i = 0; i < _code.size() && label != _pos2label.end(); ++i)
+						{
+							if (nm != _model.end() && nm->first <= i) m = nm++;
+							// TODO: align here
+							if (i == label->first) _label2addr[label++->second] = total;
+							total += _code[i]->length(m->second);
+						}
 					}
 				}
 			}
+			_text;
+
+			section *_section = &_text;
+
+			std::size_t _next_label_index = 0;
+
+			reloc *_reloc = new reloc();
 
 		public:
+
+			~assembler()
+			{
+				if (!--_reloc->_refs) delete _reloc;
+			}
 
 			void operator()(const instruction &i)
 			{
@@ -858,24 +1019,36 @@ namespace codegen
 
 			template<class T> function_module<T> assemble_function()
 			{
-				compute_label_addresses();
+				_text.compute_label_addresses();
 
-				std::vector<byte> buf;
-				auto nm = _model.begin(), m = nm++;
+				_text.compute_global_addresses(_reloc->_text_globals);
+				_data.compute_global_addresses(_reloc->_data_globals);
+				_bss.compute_global_addresses(_reloc->_bss_globals);
+
+				std::vector<byte> text;
+				auto nm = _text._model.begin(), m = nm++;
 				for (std::size_t i = 0; i < _text._code.size(); ++i)
 				{
-					if (nm != _model.end() && nm->first <= i) m = nm++;
-					_text._code[i]->encode(buf, m->second);
+					if (nm != _text._model.end() && nm->first <= i) m = nm++;
+					_text._code[i]->encode(text, 0,  _reloc, m->second);
 				}
-//				std::cout << std::endl;
-//				for (auto b : buf) std::cout << std::hex << (int)b << std::endl;
-				return function_module<T>(buf);
+				std::vector<byte> data;
+				for (auto i : _data._code) i->encode(data, 1, _reloc, model());
+				std::size_t bss_size = 0;
+				for (auto i : _bss._code) bss_size += i->length(model());
+
+		//		std::cout << std::endl;
+		//		for (auto b : text) std::cout << std::hex << (int)b << std::endl;
+		//		if (!data.empty()) std::cout << "--" << std::endl;
+		//		for (auto b : data) std::cout << std::hex << (int)b << std::endl;
+
+				return function_module<T>(text, data, bss_size, _reloc);
 			}
 
 			void text(model m = model())
 			{
 				_section = &_text;
-				if ((--_model.upper_bound(_text._code.size()))->second != m) _model[_text._code.size()] = m;
+				if ((--_text._model.upper_bound(_text._code.size()))->second != m) _text._model[_text._code.size()] = m;
 			}
 
 			void data()
@@ -890,11 +1063,12 @@ namespace codegen
 
 			void clear()
 			{
-				_model.clear();
-				_model[0] = model();
 				_text.clear();
 				_data.clear();
 				_bss.clear();
+
+				if (!--_reloc->_refs) delete _reloc;
+				_reloc = new reloc();
 			}
 
 			std::size_t new_label()
@@ -904,13 +1078,18 @@ namespace codegen
 
 			void mark_label(std::size_t index)
 			{
-				_section->_label2pos[index] = _section->_code.size();
-				_section->_pos2label[_section->_code.size()] = index;
+				_text._label2pos[index] = _section->_code.size();
+				_text._pos2label[_section->_code.size()] = index;
 			}
 
 			std::int64_t get_label_addr(std::size_t index)
 			{
-				return _label2addr[index];
+				return _text._label2addr[index];
+			}
+
+			void mark_global(std::intptr_t id)
+			{
+				_section->_globals[_section->_code.size()] = id;
 			}
 		};
 
@@ -953,6 +1132,73 @@ namespace codegen
 			}
 		};
 
+		class global : public symbol
+		{
+			unsigned *_item;
+
+		public:
+
+			global()
+			{
+				_item = new unsigned;
+				*_item = 1;
+			}
+
+			global(const global &other)
+			{
+				_item = other._item;
+				++*_item;
+			}
+
+			~global()
+			{
+				if (!--*_item) delete _item;
+			}
+
+			std::int64_t addr() const
+			{
+				return 0;
+			}
+
+			global &operator=(const global &other)
+			{
+				if (!--*_item) delete _item;
+				_item = other._item;
+				++*_item;
+			}
+
+			bool is_known() const
+			{
+				return false;
+			}
+
+ 			bool is_relative() const // what was the point of this, again?
+			{
+				return true;
+			}
+
+			byte nbytes() const
+			{
+				return 4;
+			}
+
+			symbol *clone() const
+			{
+				return new global(*this);
+			}
+
+			std::intptr_t id() const
+			{
+				return reinterpret_cast<std::intptr_t>(_item);
+			}
+
+			void mark(assembler &a)
+			{
+				a.mark_global(id());
+			}
+		};
+
+		// TODO: branches to global symbols
 		template<byte C> class branch_instruction : public instruction
 		{
 			label _target;
@@ -966,7 +1212,7 @@ namespace codegen
 				return new branch_instruction(_target);
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				auto addr = _target.addr() - code.size() - 2;
 				if (addr > 127 || addr < -128)
@@ -1029,19 +1275,20 @@ namespace codegen
 
 			~jump_instruction()
 			{
-				delete _target;
+				if (_target) delete _target;
 			}
 
 			jump_instruction &operator=(const jump_instruction &jmp)
 			{
-				delete _target;
+				if (_target) delete _target;
 				_target = jmp._target->clone();
 			}
 
 			jump_instruction &&operator=(const jump_instruction &&jmp)
 			{
-				delete _target;
+				if (_target) delete _target;
 				_target = jmp._target;
+				jmp._target = nullptr;
 			}
 
 			instruction *clone() const
@@ -1049,7 +1296,7 @@ namespace codegen
 				return new jump_instruction(*this);
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				if (_target->is_relative())
 				{
@@ -1091,15 +1338,14 @@ namespace codegen
 				return new multiply_instruction(_operand);
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				if (m._bits != 16 && _operand.log2bits() == 4) code.push_back(0x66);
 				byte rex = _operand.rex();
 				if (rex) code.push_back(rex);
 				code.push_back(_operand.log2bits() == 3? 0xf6 : 0xf7);
 				code.push_back(_operand.modrm() | _opcode);
-				if (_operand.has_sib()) code.push_back(_operand.sib());
-				_operand.write_displacement(code, m);
+				_operand.write_sib_and_displacement(code, section, rel, m);
 			}
 		};
 
@@ -1146,11 +1392,11 @@ namespace codegen
 				return new IMUL(_reg, _operand);
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				if (_is_ordinary)
 				{
-					multiply_instruction<5>::encode(code, m);
+					multiply_instruction<5>::encode(code, section, rel, m);
 					return;
 				}
 				if (m._bits != 16 && _operand.log2bits() == 4) code.push_back(0x66);
@@ -1164,8 +1410,7 @@ namespace codegen
 					code.push_back(0xaf);
 				}
 				code.push_back((_reg.index() & 7) << 3 | _operand.modrm());
-				if (_operand.has_sib()) code.push_back(_operand.sib());
-				_operand.write_displacement(code, m);
+				_operand.write_sib_and_displacement(code, section, rel, m);
 				if (_immediate)
 				{
 					auto addr = _immediate->addr();
@@ -1192,7 +1437,7 @@ namespace codegen
 
 			barrel_instruction(const reg_mem &operand, const integer_reg &must_be_cl) : _operand(operand), _cl(true)
 			{
-				if (must_be_cl.index() != 1 || must_be_cl.log2bits() != 3) throw argument_mismatch();
+				if (must_be_cl.index() != 1 || must_be_cl.log2bits() != 3) throw argument_mismatch("Non-constant shift count register not CL");
 			}
 
 			barrel_instruction(const integer_reg &operand, const integer_reg &must_be_cl)
@@ -1203,7 +1448,7 @@ namespace codegen
 				return new barrel_instruction(_operand, _count, _cl);
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				byte lsb = _operand.log2bits() > 3? 1 : 0;
 				if (m._bits != 16 && _operand.log2bits() == 4) code.push_back(0x66);
@@ -1213,8 +1458,7 @@ namespace codegen
 				else if (_count == 1) code.push_back(lsb | 0xd0);
 				else code.push_back(lsb | 0xc0);
 				code.push_back(_opcode | _operand.modrm());
-				if (_operand.has_sib()) code.push_back(_operand.sib());
-				_operand.write_displacement(code, m);
+				_operand.write_sib_and_displacement(code, section, rel, m);
 				if (!_cl && _count != 1) code.push_back(_count);
 			}
 		};
@@ -1228,7 +1472,7 @@ namespace codegen
 		using SHR = barrel_instruction<5>;
 		using SAR = barrel_instruction<7>;
 
-		// this is for floating point SSE instructions; integer instructions need a slightly different logic
+		// This is for floating point SSE instructions; integer instructions need a slightly different logic.
 		template<byte P, byte C> class typical_sse_instruction : public instruction
 		{
 			byte _prefix = P; // 0 = none
@@ -1248,7 +1492,7 @@ namespace codegen
 				return new typical_sse_instruction(_dst, _src);
 			}
 
-			void encode(std::vector<byte> &code, const model &m) const
+			void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
 			{
 				if (_prefix) code.push_back(_prefix);
 				byte rex = _src.rex() | (_dst.index() & 8? 0x44 : 0);
@@ -1256,8 +1500,7 @@ namespace codegen
 				code.push_back(0xf);
 				code.push_back(_opcode);
 				code.push_back((_dst.index() & 7) << 3 | _src.modrm());
-				if (_src.has_sib()) code.push_back(_src.sib());
-				_src.write_displacement(code, m);
+				_src.write_sib_and_displacement(code, section, rel, m);
 			}
 		};
 
