@@ -293,9 +293,9 @@ TEST(X86Asm, Shifts)
 
     x86::assembler a;
 
-#    ifndef _WIN32
+#   ifndef _WIN32
     a(x86::MOV(x86::RCX, X));
-#    endif
+#   endif
 
     a(x86::SHL(Y, x86::CL));
     a(x86::MOV(x86::RAX, Y));
@@ -323,15 +323,5 @@ TEST(X86Asm, Data)
     a(var);
     a(x86::DQ(123456));
 
-    codegen::function_module<std::int64_t()> module;
-    try
-    {
-         module = a.assemble_function<std::int64_t()>();
-    }
-    catch (x86::argument_mismatch ex)
-    {
-        std::cout << "Argument mismatch: " << ex.msg() << std::endl;
-    }
-
-    ASSERT_EQ(123456, module.link()());
+    ASSERT_EQ(123456, a.assemble_function<std::int64_t()>().link()());
 }

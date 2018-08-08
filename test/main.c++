@@ -32,6 +32,8 @@
 
 #include "x86_asm_test.h++"
 
+#include "ir_test.h++"
+
 int main(int argc, char *argv[])
 {
     testing::InitGoogleTest(&argc, argv);

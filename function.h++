@@ -25,7 +25,6 @@ namespace codegen
 {
     template<class T> class function { };
 
-    // TODO: Rule of 5
     template<class R, class... ARGS> class function<R(ARGS...)>
     {
         program *_code = nullptr;

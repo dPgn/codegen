@@ -16,11 +16,14 @@
     limitations under the License.
 */
 
-#ifndef CODEGEN_H
-#define CODEGEN_H
+#ifndef CODEGEN_COMMON_H
+#define CODEGEN_COMMON_H
 
-#include "ir.h++"
+#include <cstdint>
 
-#include "x86_asm.h++"
+namespace codegen
+{
+    using byte = std::uint8_t;
+}
 
 #endif

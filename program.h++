@@ -39,10 +39,10 @@
 #include <unistd.h>
 #endif
 
+#include "common.h++"
+
 namespace codegen
 {
-    typedef std::uint8_t byte;
-
     // TODO: facilitate data as a part of this (badly named) entity, as there is otherwise no
     // portable way to guarantee that code and data are close enough to each other for shorter
     // relative immediate offsets
