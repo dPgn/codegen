@@ -47,6 +47,44 @@ namespace codegen
 
     public:
 
+        module() { }
+
+        module(const module &other)
+        {
+            _text = other._text;
+            _data = other._data;
+            _bss_size = other._bss_size;
+            if (_reloc = other._reloc) ++_reloc->_refs;
+        }
+
+        module(module &&other)
+        {
+            _text = other._text;
+            _data = other._data;
+            _bss_size = other._bss_size;
+            _reloc = other._reloc;
+            other._reloc = nullptr;
+        }
+
+        module &operator=(const module &other)
+        {
+            _text = other._text;
+            _data = other._data;
+            _bss_size = other._bss_size;
+            if (_reloc = other._reloc) ++_reloc->_refs;
+            return *this;
+        }
+
+        module &operator=(module &&other)
+        {
+            _text = other._text;
+            _data = other._data;
+            _bss_size = other._bss_size;
+            _reloc = other._reloc;
+            other._reloc = nullptr;
+            return *this;
+        }
+
         ~module()
         {
             if (_reloc && !--_reloc->_refs) delete _reloc;

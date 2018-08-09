@@ -20,6 +20,10 @@
 #define CODEGEN_COMMON_H
 
 #include <cstdint>
+#include <vector>
+#include <string>
+#include <map>
+#include <set>
 
 namespace codegen
 {

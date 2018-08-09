@@ -60,7 +60,7 @@ namespace codegen
 
         static std::size_t align(std::size_t p, std::size_t a = page_size())
         {
-            return (p + page_size() - 1) & (~(std::size_t)0 - page_size() + 1);
+            return (p + a - 1) & (~(std::size_t)0 - a + 1);
         }
 
     public:

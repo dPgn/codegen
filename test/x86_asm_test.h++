@@ -48,6 +48,7 @@ TEST(X86Asm, PlainReturn)
     ASSERT_EXIT({ fun(); exit(0); }, testing::ExitedWithCode(0), "");
 }
 
+
 // The first two integer argument registers
 // Everything except Windows (that I'm aware of) uses System V ABI.
 // Windows is actually not supported by the library, yet, but the calling convention is already

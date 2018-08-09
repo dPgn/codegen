@@ -98,7 +98,7 @@ namespace codegen
                 _data.clear();
             }
 
-            std::size_t size() const
+            word size() const
             {
                 return _data.size();
             }
@@ -156,7 +156,234 @@ namespace codegen
                 return pos;
             }
         };
-    };
+
+        struct node_id
+        {
+            enum
+            {
+#               define X(base,name,...) name,
+#               include "ir_nodes.def"
+#               undef X
+                nnodes
+            };
+        };
+
+        class args
+        {
+            std::vector<word> _args;
+
+            void add() { }
+
+            template<class... T> void add(word x, T... rest)
+            {
+                _args.push_back(x);
+                add(rest...);
+            }
+
+        public:
+
+            template<class... ARGS> args(ARGS... a)
+            {
+                add(a...);
+            }
+
+            word operator[](unsigned k) const
+            {
+                return _args[k];
+            }
+
+            word &operator[](unsigned k)
+            {
+                while (k >= _args.size()) _args.push_back(0);
+                return _args[k];
+            }
+
+            word n() const
+            {
+                return _args.size();
+            }
+        };
+
+        template<class... ARGS> struct node_args { };
+
+        template<> struct node_args<word>
+        {
+            word _last;
+
+            node_args() { }
+
+            node_args(word last) : _last(last) { }
+
+            word operator[](unsigned k) const
+            {
+                // TODO: throw something if k != 0
+                return _last;
+            }
+
+            word &operator[](unsigned k)
+            {
+                // TODO: throw something if k != 0
+                return _last;
+            }
+
+            word nargs() const
+            {
+                return 1;
+            }
+        };
+
+        template<> struct node_args<args>
+        {
+            args _args;
+
+            node_args() { }
+
+            template<class... ARGS> node_args(ARGS... a) : _args(a...) { }
+
+            word operator[](unsigned k) const
+            {
+                return _args[k];
+            }
+
+            word &operator[](unsigned k)
+            {
+                return _args[k];
+            }
+
+            word nargs() const
+            {
+                return _args.n();
+            }
+        };
+
+        template<class... ARGS> struct node_args<word, ARGS...>
+        {
+            word _first;
+            node_args<ARGS...> _rest;
+
+            node_args() { }
+
+            template<class... REST> node_args(word first, REST... rest) : _first(first), _rest(rest...) { }
+
+            word operator[](unsigned k) const
+            {
+                return k? _rest[k - 1] : _first;
+            }
+
+            word &operator[](unsigned k)
+            {
+                return k? _rest[k - 1] : _first;
+            }
+
+            word nargs() const
+            {
+                return 1 + _rest.nargs();
+            }
+        };
+
+        class node { };
+
+#       define X(base,name_,...) \
+        class name_ : public base \
+        { \
+            node_args<__VA_ARGS__> _args; \
+        public: \
+            template<class... ARGS> name_(ARGS... args) : _args(args...) { } \
+            name_(const buffer &buf, word &pos, word nargs) { for (word i = 0; i < nargs; ++i) (*this)[i] = buf.read(pos); } \
+            word id() const { return node_id::name_; } \
+            word operator[](unsigned k) const { return _args[k]; } \
+            word &operator[](unsigned k) { return _args[k]; } \
+            word nargs() const { return _args.nargs(); } \
+            std::string name() const { return #name_; } \
+        };
+#       include "ir_nodes.def"
+#       undef X
+
+        class code
+        {
+            buffer _buf;
+
+        public:
+
+            template<class NODE> word operator()(const NODE &node)
+            {
+                word pos = _buf.size();
+                _buf.write(node.nargs());
+                _buf.write(node.id());
+                for (unsigned i = 0; i < node.nargs(); ++i) _buf.write(node[i]);
+                _buf.write(_buf.size() - pos);
+                return pos;
+            }
+
+            template<class F> auto study(const F &f, word index) const -> typename F::rval
+            {
+                word pos = index;
+                word nargs = _buf.read(index);
+                typename F::rval r;
+                switch (_buf.read(index))
+                {
+#               define X(base,name,...) case node_id::name: \
+                    r = f(*this, pos, name(_buf, index, nargs)); \
+                    break;
+#               include "ir_nodes.def"
+#               undef X
+                    default:
+                        // TODO: throw something
+                        ;
+                }
+                _buf.read(index);
+                return r;
+            }
+
+            template<class F> void pass(F &f, word &index) const
+            {
+                word pos = index;
+                word nargs = _buf.read(index);
+                switch (_buf.read(index))
+                {
+#               define X(base,name,...) case node_id::name: \
+                    f(*this, pos, name(_buf, index, nargs)); \
+                    break;
+#               include "ir_nodes.def"
+#               undef X
+                    default:
+                        // TODO: throw something
+                        ;
+                }
+                _buf.read(index);
+            }
+
+            template<class F> void pass(F &f) const
+            {
+                for (word index = 0; index < _buf.size(); pass(f, index));
+            }
+        };
+
+        class debug_writer
+        {
+            std::stringstream ss;
+
+        public:
+
+            template<class NODE> void operator()(const code &c, word index, const NODE &node)
+            {
+                ss.width(19);
+                ss << std::right << index << " " << node.name();
+                ss << std::string(16 - node.name().length(), ' ');
+                for (word i = 0; i < node.nargs(); )
+                {
+                    ss << std::right << node[i];
+                    if (++i < node.nargs()) ss << ", ";
+                }
+                ss << std::endl;
+            }
+
+            std::string str() const
+            {
+                return ss.str();
+            }
+        };
+    }
 }
 
 #endif

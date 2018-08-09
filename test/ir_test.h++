@@ -69,3 +69,17 @@ TEST(IR, RawBuffer)
     ASSERT_EQ(13, *r);
     ASSERT_EQ(r, buf.rbegin());
 }
+
+TEST(IR, Code)
+{
+    ir::code code;
+
+    ASSERT_EQ(0, code(ir::Add(-42, 42)));
+    ASSERT_EQ(5, code(ir::Call(1, 2, 3)));
+    ASSERT_EQ(11, code(ir::Sub(666, 1234567890)));
+/*
+    auto writer = ir::debug_writer();
+    code.pass(writer);
+    std::cout << writer.str() << std::endl;
+*/
+}

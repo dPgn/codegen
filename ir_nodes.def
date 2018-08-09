@@ -1,0 +1,3 @@
+X(node, Add, word, word)
+X(node, Sub, word, word)
+X(node, Call, word, args)
