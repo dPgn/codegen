@@ -75,11 +75,33 @@ TEST(IR, Code)
     ir::code code;
 
     ASSERT_EQ(0, code(ir::Add(-42, 42)));
-    ASSERT_EQ(5, code(ir::Call(1, 2, 3)));
+    ASSERT_EQ(5, code(ir::Invoke(1, 2, 3)));
     ASSERT_EQ(11, code(ir::Sub(666, 1234567890)));
 /*
     auto writer = ir::debug_writer();
     code.pass(writer);
     std::cout << writer.str() << std::endl;
 */
+    ir::word index = 0;
+    auto first = code.read(index);
+    auto second = code.read(index);
+    auto third = code.read(index);
+
+    ASSERT_EQ(index, code.size());
+
+    ASSERT_EQ("Add", first->name());
+    ASSERT_EQ("Invoke", second->name());
+    ASSERT_EQ("Sub", third->name());
+
+    ASSERT_EQ(2, first->nargs());
+    ASSERT_EQ(3, second->nargs());
+    ASSERT_EQ(2, third->nargs());
+
+    ASSERT_EQ(-42, (*first)[0]);
+    ASSERT_EQ(42, (*first)[1]);
+    ASSERT_EQ(1, (*second)[0]);
+    ASSERT_EQ(2, (*second)[1]);
+    ASSERT_EQ(3, (*second)[2]);
+    ASSERT_EQ(666, (*third)[0]);
+    ASSERT_EQ(1234567890, (*third)[1]);
 }

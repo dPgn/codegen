@@ -30,9 +30,12 @@
 
 #include "../codegen.h++"
 
-#include "x86_asm_test.h++"
+using namespace codegen;
 
 #include "ir_test.h++"
+
+#include "x86_asm_test.h++"
+#include "x86_gen_test.h++"
 
 int main(int argc, char *argv[])
 {

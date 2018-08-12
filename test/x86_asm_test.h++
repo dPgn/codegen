@@ -16,8 +16,6 @@
     limitations under the License.
 */
 
-namespace x86 = codegen::x86;
-
 TEST(X86Asm, PlainReturn)
 {
     // Generate the assembler object

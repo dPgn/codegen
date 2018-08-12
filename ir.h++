@@ -204,7 +204,25 @@ namespace codegen
             }
         };
 
-        template<class... ARGS> struct node_args { };
+        template<class... ARGS> struct node_args
+        {
+            word operator[](unsigned) const
+            {
+                // TODO: throw something sensible
+                throw 0;
+            }
+
+            word &operator[](unsigned)
+            {
+                // TODO: throw something sensible
+                throw 0;
+            }
+
+            word nargs() const
+            {
+                return 0;
+            }
+        };
 
         template<> struct node_args<word>
         {
@@ -299,6 +317,58 @@ namespace codegen
 #       include "ir_nodes.def"
 #       undef X
 
+        struct vnode
+        {
+            virtual word id() const = 0;
+
+            virtual word operator[](unsigned k) const = 0;
+
+            virtual word nargs() const = 0;
+
+            virtual std::string name() const = 0;
+        };
+
+        template<class NODE> class vnode_impl : public vnode
+        {
+            const NODE _node;
+
+        public:
+
+            vnode_impl(const NODE &node) : _node(node) { }
+
+            word id() const
+            {
+                return _node.id();
+            }
+
+            word operator[](unsigned k) const
+            {
+                return _node[k];
+            }
+
+            word nargs() const
+            {
+                return _node.nargs();
+            }
+
+            std::string name() const
+            {
+                return _node.name();
+            }
+        };
+
+        class code;
+
+        struct vnode_query
+        {
+            using rval = vnode *;
+
+            template<class NODE> rval operator()(const code &, word, const NODE &node) const
+            {
+                return new vnode_impl<NODE>(node);
+            }
+        };
+
         class code
         {
             buffer _buf;
@@ -315,7 +385,18 @@ namespace codegen
                 return pos;
             }
 
-            template<class F> auto study(const F &f, word index) const -> typename F::rval
+            word operator()(char x) { return (*this)(Imm(x)); }
+            word operator()(unsigned char x) { return (*this)(Imm(x)); }
+            word operator()(short x) { return (*this)(Imm(x)); }
+            word operator()(unsigned short x) { return (*this)(Imm(x)); }
+            word operator()(int x) { return (*this)(Imm(x)); }
+            word operator()(unsigned x) { return (*this)(Imm(x)); }
+            word operator()(long x) { return (*this)(Imm(x)); }
+            word operator()(unsigned long x) { return (*this)(Imm(x)); }
+            word operator()(long long x) { return (*this)(Imm(x)); }
+            word operator()(unsigned long long x) { return (*this)(Imm(x)); }
+
+            template<class F> auto query(const F &f, word &index) const -> typename F::rval
             {
                 word pos = index;
                 word nargs = _buf.read(index);
@@ -333,6 +414,11 @@ namespace codegen
                 }
                 _buf.read(index);
                 return r;
+            }
+
+            vnode *read(word &index) const
+            {
+                return query(vnode_query(), index);
             }
 
             template<class F> void pass(F &f, word &index) const
@@ -356,6 +442,11 @@ namespace codegen
             template<class F> void pass(F &f) const
             {
                 for (word index = 0; index < _buf.size(); pass(f, index));
+            }
+
+            word size() const
+            {
+                return _buf.size();
             }
         };
 

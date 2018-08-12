@@ -435,6 +435,11 @@ namespace codegen
                 return _indirect;
             }
 
+            bool is_address_only() const
+            {
+                return _indirect && !_has_index && !_has_base;
+            }
+
             bool has_sib() const
             {
                 return _indirect && (_has_base || _has_index && (_index == 12 || _index_shift));
@@ -775,7 +780,8 @@ namespace codegen
             }
         };
 
-        template<byte C> class basic_binary_integer_instruction : public instruction
+        // It would probably be cleaner to have MOV as its own class, but this works, too.
+        template<byte C, bool IS_MOV = false> class basic_binary_integer_instruction : public instruction
         {
             byte _opcode = C;
             reg_mem _reg_mem;
@@ -835,14 +841,32 @@ namespace codegen
                 if (rex) code.push_back(rex);
                 if (_reg_imm.is_immediate())
                 {
-                    if (immbytes > 4) throw "TODO!!! Instructions with 64 bit immediate argument";
+                    if (immbytes > 4)
+                        if (!IS_MOV)
+                            throw argument_mismatch("64 bit immediate");
+                        else if (_reg_mem.is_indirect())
+                        throw argument_mismatch("64 bit immediate combined with an indirect operand.");
 
                     if (immbytes > 1 << _reg_mem.log2bits() - 3)
                         throw argument_mismatch("Immediate wider than the operation itself");
-                    if (!_reg_mem.is_indirect() && !_reg_mem.reg_index() && (_reg_mem.log2bits() < 5 || immbytes > 1)) // the shorter encodings for xAX
+                    if (!IS_MOV && !_reg_mem.is_indirect() && !_reg_mem.reg_index() && (_reg_mem.log2bits() < 5 || immbytes > 1)) // the shorter encodings for xAX
                     {
                         code.push_back(_opcode | 4 | (_reg_mem.log2bits() == 3? 1 : 0));
                         immbytes = 1 << _reg_mem.log2bits() - 3;
+                    }
+                    else if (IS_MOV)
+                    {
+                        if (_reg_mem.is_indirect() || _reg_mem.log2bits() == 6 && immbytes <= 4)
+                        {
+                            code.push_back(0xc6 | _reg_mem.modrm() & 7 | (_reg_mem.log2bits() > 3? 1 : 0));
+                            code.push_back(_reg_mem.modrm());
+                            immbytes = _reg_mem.log2bits() == 6? 4 : 1 << _reg_mem.log2bits() - 3;
+                        }
+                        else
+                        {
+                            code.push_back(0xb0 | _reg_mem.modrm() & 7 | (_reg_mem.log2bits() > 3? 8 : 0));
+                            immbytes = 1 << _reg_mem.log2bits() - 3;
+                        }
                     }
                     else
                     {
@@ -866,6 +890,8 @@ namespace codegen
                 }
                 else
                 {
+                    // TODO: shorter encodings to move between immediate memory location and xAX (A0, A1, A2, A3)
+                    // if (IS_MOV && !_reg_imm.modrm() && _reg_mem.is_address_only()) ...
                     if (!_reg_mem.is_indirect() && _reg_mem.log2bits() != _reg_imm.log2bits())
                         throw argument_mismatch("Register arguments of different widths");
                     code.push_back(_reg_imm.log2bits() == 3? _opcode : _opcode | 1);
@@ -876,7 +902,7 @@ namespace codegen
             }
         };
 
-        using MOV = basic_binary_integer_instruction<0x88>; // TODO: MOV needs its own class if we want to support all encodings
+        using MOV = basic_binary_integer_instruction<0x88, true>; // TODO: MOV needs its own class if we want to support all encodings
 
         using ADD = basic_binary_integer_instruction<0x00>;
         using OR  = basic_binary_integer_instruction<0x08>;
@@ -1037,10 +1063,12 @@ namespace codegen
                 std::size_t bss_size = 0;
                 for (auto i : _bss._code) bss_size += i->length(model());
 
-        //        std::cout << std::endl;
-        //        for (auto b : text) std::cout << std::hex << (int)b << std::endl;
-        //        if (!data.empty()) std::cout << "--" << std::endl;
-        //        for (auto b : data) std::cout << std::hex << (int)b << std::endl;
+#           if 0
+                std::cout << std::endl;
+                for (auto b : text) std::cout << std::hex << (int)b << std::endl;
+                if (!data.empty()) std::cout << "--" << std::endl;
+                for (auto b : data) std::cout << std::hex << (int)b << std::endl;
+#           endif
 
                 return function_module<T>(text, data, bss_size, _reloc);
             }

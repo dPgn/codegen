@@ -19,8 +19,6 @@
 #ifndef CODEGEN_H
 #define CODEGEN_H
 
-#include "ir.h++"
-
-#include "x86_asm.h++"
+#include "x86_gen.h++"
 
 #endif
