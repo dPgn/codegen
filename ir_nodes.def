@@ -1,3 +1,53 @@
-X(node, Add, word, word)
-X(node, Sub, word, word)
-X(node, Call, word, args)
+X(arithmetic, Add, word, word)
+X(arithmetic, Sub, word, word)
+X(arithmetic, Mul, word, word)
+X(arithmetic, Div, word, word)
+X(node, DivMod, word, word, word) // the modulo is written in the first argument
+X(node, MulWiden, word, word, word) // writes the high half of the result to the first argument
+
+X(compare, Gt, word, word)
+X(compare, Lt, word, word)
+X(compare, Gte, word, word)
+X(compare, Lte, word, word)
+X(compare, Eq, word, word)
+X(compare, Neq, word, word)
+
+X(arithmetic, And, word, word)
+X(arithmetic, Or, word, word)
+X(arithmetic, Xor, word, word)
+
+X(arithmetic, Neg, word)
+X(arithmetic, Not, word)
+
+X(node, Move, word, word) // destination, source
+
+// low-level calls
+X(node, Call, word)
+X(node, Ret)
+
+// low-level control flow
+X(node, Label)
+X(node, Mark, word)
+X(node, Branch, word, word) // label, condition
+X(node, Jump, word)
+
+// type constructors
+X(node, Int, word) // negative signed, positive unsigned, absolute value = number of bits; 0 = boolean
+X(node, Float, word, word, word, word) // base, min exponent, max exponent, significant digits
+X(node, Array, word, word) // element type, size
+X(node, Struct, args) // layout should be compatible with C structs on the platform
+X(node, Tuple, args)  // layout undefined, pointers to members allowed
+X(node, Packed, args) // layout optimized for smallest reasonable memory footprint
+X(node, Union, args)
+X(node, Ptr, word)
+X(node, Fun, word, word, args) // calling convention id (0 = default), return type (0 = none), argument types
+
+// constants
+X(node, Imm, word) // immediate integer
+X(node, Str, args) // args are the characters
+X(node, Data, word, args) // type of the data (Tuple, Struct, Packed, or Array), elements in order
+
+// calling conventions
+X(node, Invoke, word, args)
+X(node, Enter, word) // argument is the type of the function, i.e. a Fun node; result is an object of the type
+X(node, Exit, word, word) // function to exit, return value (0 if no return value)
