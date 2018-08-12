@@ -25,16 +25,16 @@ namespace codegen
 {
     class semantics
     {
-        struct is_immediate_query
+        template<class WHAT> struct is_query
         {
             using rval = bool;
 
-            template<class NODE> rval operator()(const ir::code &code, ir::word pos, const NODE &node) const
+            rval operator()(const ir::code &code, ir::word pos, const ir::node &node) const
             {
                 return false;
             }
 
-            rval operator()(const ir::code &code, ir::word pos, const ir::Imm &node) const
+            rval operator()(const ir::code &code, ir::word pos, const WHAT &node) const
             {
                 return true;
             }
@@ -67,10 +67,10 @@ namespace codegen
 
         semantics(const ir::code &code, ir::word pos) : _code(code), _pos(pos) { }
 
-        bool is_immediate() const
+        template<class WHAT> bool is() const
         {
             auto pos = _pos;
-            return _code.query(is_immediate_query(), pos);
+            return _code.query(is_query<WHAT>(), pos);
         }
 
         std::int_least64_t int64() const

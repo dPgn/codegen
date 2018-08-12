@@ -38,26 +38,87 @@ namespace codegen
 
             assembler _a;
 
+            struct query_reg_mem
+            {
+                using rval = reg_mem;
+
+                reg_mem operator()(const ir::code &code, ir::word pos, const ir::node &) const
+                {
+                    ir::vnode *node = code.read(pos);
+                    throw unsupported_node { node->id(), node->name() };
+                }
+
+
+            };
+
+            // An important part of this is to convert the IR node into a two-address instruction.
+            // The first operand of the arithmetic operation node is ignored, and _dst is used,
+            // instead.
+            struct gen_arithmetic
+            {
+                ir::word _dst;
+                assembler &_a;
+
+                gen_arithmetic(assembler &a, ir::word dst) : _a(a), _dst(dst) { }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::node &)
+                {
+                    ir::vnode *node = code.read(pos);
+                    throw unsupported_node { node->id(), node->name() };
+                }
+
+                template<class INSTR, class NODE> void encode_binary(const ir::code &code, const NODE &node)
+                {
+                    if (ir::x86::is_integer_reg(_dst))
+                        if (semantics(code, node[1]).is<ir::Imm>())
+                            _a(INSTR(ir::x86::integer_reg(_dst), semantics(code, node[1]).int64()));
+                        else if (ir::x86::is_integer_reg(node[1]))
+                            _a(INSTR(ir::x86::integer_reg(_dst), ir::x86::integer_reg(node[1])));
+                        else
+                        {
+                            auto t = node[1];
+                            _a(INSTR(ir::x86::integer_reg(_dst), code.query(query_reg_mem(), t)));
+                        }
+                    // TODO: a lot
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Add &node)
+                {
+                    encode_binary<ADD, ir::Add>(code, node);
+                }
+            };
+
         public:
 
-            template<class NODE> void operator()(const ir::code &code, ir::word pos, const NODE &node)
+            void operator()(const ir::code &code, ir::word pos, const ir::node &)
             {
-                throw unsupported_node { node.id(), node.name() };
+                ir::vnode *node = code.read(pos);
+                throw unsupported_node { node->id(), node->name() };
             }
 
-            void operator()(const ir::code &code, ir::word pos, ir::Imm node) { }
+            void operator()(const ir::code &code, ir::word pos, const ir::Imm &node) { }
 
-            void operator()(const ir::code &code, ir::word pos, ir::Move node)
+            void operator()(const ir::code &code, ir::word pos, const ir::arithmetic &node) { }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Move &node)
             {
-
                 if (ir::x86::is_integer_reg(node[0]))
                     if (ir::x86::is_integer_reg(node[1]))
                         _a(MOV(ir::x86::integer_reg(node[0]), ir::x86::integer_reg(node[1])));
-                    else if (semantics(code, node[1]).is_immediate())
+                    else if (semantics(code, node[1]).is<ir::Imm>())
                         _a(MOV(ir::x86::integer_reg(node[0]), semantics(code, node[1]).int64()));
+                    else if (semantics(code, node[1]).is<ir::arithmetic>())
+                    {
+                        ir::word t = node[1];
+                        ir::vnode &val = *code.read(t);
+                        if (val[0] != node[0]) (*this)(code, pos, ir::Move(node[0], val[0]));
+                        auto g = gen_arithmetic(_a, node[0]);
+                        code.pass(g, t = node[1]);
+                    }
+                // TODO: more than I'd like to admit
             }
 
-            void operator()(const ir::code &code, ir::word pos, ir::Ret node)
+            void operator()(const ir::code &code, ir::word pos, const ir::Ret &node)
             {
                 _a(RET());
             }

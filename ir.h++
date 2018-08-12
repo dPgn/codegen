@@ -299,7 +299,11 @@ namespace codegen
             }
         };
 
-        class node { };
+        struct node { };
+
+        struct arithmetic : node { };
+
+        struct compare : node { };
 
 #       define X(base,name_,...) \
         class name_ : public base \

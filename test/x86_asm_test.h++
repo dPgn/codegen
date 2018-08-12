@@ -16,6 +16,21 @@
     limitations under the License.
 */
 
+/*
+    TODO:
+
+    Relocations of immediate operands. Global symbols are accepted by x86::assembler as immediate
+    arguments, but they do not generate relocation info, which makes them all effectively zero.
+
+    More tests needed: all the corner cases of different combinations of address modes and
+    registers, etc. This is a weakness of the tests firsts approach, as you cannot really know what
+    some of the corner cases are before writing the implementation.
+
+    Death tests for all invalid encodings (and make them pass, obviously).
+
+    SSE support, at least enough to have the basic floating point arithmetic.
+*/
+
 TEST(X86Asm, PlainReturn)
 {
     // Generate the assembler object
