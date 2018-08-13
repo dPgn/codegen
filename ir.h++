@@ -452,6 +452,11 @@ namespace codegen
             {
                 return _buf.size();
             }
+
+            void clear()
+            {
+                _buf.clear();
+            }
         };
 
         class debug_writer

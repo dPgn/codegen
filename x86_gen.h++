@@ -28,8 +28,14 @@ namespace codegen
     {
         struct unsupported_node
         {
-            const ir::word _id;
-            const std::string _name;
+            const ir::vnode *_node;
+
+            unsupported_node(const ir::code &code, ir::word pos) : _node(code.read(pos)) { }
+
+            ~unsupported_node()
+            {
+                delete _node;
+            }
         };
 
         class gen
@@ -44,27 +50,29 @@ namespace codegen
 
                 reg_mem operator()(const ir::code &code, ir::word pos, const ir::node &) const
                 {
-                    ir::vnode *node = code.read(pos);
-                    throw unsupported_node { node->id(), node->name() };
+                    throw unsupported_node(code, pos);
                 }
 
-
+                reg_mem operator()(const ir::code &code, ir::word pos, const ir::Ld &node) const
+                {
+                    if (ir::x86::is_integer_reg(node[0]))
+                        return DS[ir::x86::integer_reg(node[0])];
+                }
             };
 
             // An important part of this is to convert the IR node into a two-address instruction.
             // The first operand of the arithmetic operation node is ignored, and _dst is used,
             // instead.
-            struct gen_arithmetic
+            struct gen_integer_arithmetic
             {
                 ir::word _dst;
                 assembler &_a;
 
-                gen_arithmetic(assembler &a, ir::word dst) : _a(a), _dst(dst) { }
+                gen_integer_arithmetic(assembler &a, ir::word dst) : _a(a), _dst(dst) { }
 
                 void operator()(const ir::code &code, ir::word pos, const ir::node &)
                 {
-                    ir::vnode *node = code.read(pos);
-                    throw unsupported_node { node->id(), node->name() };
+                    throw unsupported_node(code, pos);
                 }
 
                 template<class INSTR, class NODE> void encode_binary(const ir::code &code, const NODE &node)
@@ -86,14 +94,45 @@ namespace codegen
                 {
                     encode_binary<ADD, ir::Add>(code, node);
                 }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Sub &node)
+                {
+                    encode_binary<SUB, ir::Sub>(code, node);
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Mul &node)
+                {
+                    encode_binary<IMUL, ir::Mul>(code, node);
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Xor &node)
+                {
+                    encode_binary<XOR, ir::Xor>(code, node);
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::And &node)
+                {
+                    encode_binary<AND, ir::And>(code, node);
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Or &node)
+                {
+                    encode_binary<OR, ir::Or>(code, node);
+                }
+
+                // Divisions must be converted to long versions before passing them to x86::gen,
+                // because higher level stages should be aware of such conversion.
+                void operator()(const ir::code &code, ir::word pos, const ir::Div &node)
+                {
+                    throw unsupported_node(code, pos);
+                }
             };
 
         public:
 
             void operator()(const ir::code &code, ir::word pos, const ir::node &)
             {
-                ir::vnode *node = code.read(pos);
-                throw unsupported_node { node->id(), node->name() };
+                throw unsupported_node(code, pos);
             }
 
             void operator()(const ir::code &code, ir::word pos, const ir::Imm &node) { }
@@ -112,7 +151,7 @@ namespace codegen
                         ir::word t = node[1];
                         ir::vnode &val = *code.read(t);
                         if (val[0] != node[0]) (*this)(code, pos, ir::Move(node[0], val[0]));
-                        auto g = gen_arithmetic(_a, node[0]);
+                        auto g = gen_integer_arithmetic(_a, node[0]);
                         code.pass(g, t = node[1]);
                     }
                 // TODO: more than I'd like to admit

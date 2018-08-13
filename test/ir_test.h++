@@ -16,8 +16,6 @@
     limitations under the License.
 */
 
-namespace ir = codegen::ir;
-
 TEST(IR, RawBuffer)
 {
     ir::buffer buf;

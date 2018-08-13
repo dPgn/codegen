@@ -22,13 +22,19 @@
     Relocations of immediate operands. Global symbols are accepted by x86::assembler as immediate
     arguments, but they do not generate relocation info, which makes them all effectively zero.
 
+    Overloads to support various ways to address memory operands. x86::reg_mem has an untested
+    implementations for them, but the overloads that allow us to write DS:[EAX + ECX * 4 + 42] are
+    missing and should be implemented and tested.
+
     More tests needed: all the corner cases of different combinations of address modes and
     registers, etc. This is a weakness of the tests firsts approach, as you cannot really know what
     some of the corner cases are before writing the implementation.
 
     Death tests for all invalid encodings (and make them pass, obviously).
 
-    SSE support, at least enough to have the basic floating point arithmetic.
+    SSE support, at least enough to have the basic floating point arithmetic for now. Full SIMD
+    support up to at least AVX2 should, of course, be implemented, but that can be done later. For
+    anything better than AVX2 I will need a newer processor.
 */
 
 TEST(X86Asm, PlainReturn)
@@ -170,6 +176,17 @@ TEST(X86Asm, AddressModes)
     a.assemble_function<void(std::int64_t *)>().link()(&n);
 
     ASSERT_EQ(55, n) << "Destination = [X], Source = Immediate";
+
+    a.clear();
+
+    // TODO:
+//    a(x86::MOV(x86::RAX, X));
+//    a(x86::MOV(x86::DS[&n], x86::RAX));
+//    a(x86::RET());
+
+//    a.assemble_function<void(std::int64_t)>().link()(42);
+
+//    ASSERT_EQ(42, n) << "Destination = n";
 }
 
 template<class INSTR> bool test_branch(std::int64_t x, std::int64_t y)
@@ -207,6 +224,38 @@ TEST(X86Asm, Branches)
     ASSERT_TRUE(test_branch<x86::JLE>(13, 42));
     ASSERT_TRUE(test_branch<x86::JLE>(42, 42));
     ASSERT_FALSE(test_branch<x86::JLE>(42, 13));
+}
+
+template<class INSTR> bool test_setcc(std::int64_t x, std::int64_t y)
+{
+    x86::assembler a;
+
+    a(x86::CMP(X, Y));
+    a(INSTR(x86::AL));
+    a(x86::RET());
+
+    return a.assemble_function<bool(std::int64_t, std::int64_t)>().link()(x, y);
+}
+
+TEST(X86Asm, Setcc)
+{
+    ASSERT_TRUE(test_setcc<x86::SETE>(42, 42));
+    ASSERT_TRUE(test_setcc<x86::SETNE>(42, 13));
+    ASSERT_TRUE(test_setcc<x86::SETC>(42, -1));
+    ASSERT_TRUE(test_setcc<x86::SETNC>(42, 1));
+    ASSERT_TRUE(test_setcc<x86::SETB>(42, -1));
+    ASSERT_TRUE(test_setcc<x86::SETNB>(42, 1));
+    ASSERT_TRUE(test_setcc<x86::SETG>(42, 13));
+    ASSERT_FALSE(test_setcc<x86::SETG>(42, 42));
+    ASSERT_FALSE(test_setcc<x86::SETG>(13, 42));
+    ASSERT_TRUE(test_setcc<x86::SETGE>(42, 13));
+    ASSERT_TRUE(test_setcc<x86::SETGE>(42, 42));
+    ASSERT_FALSE(test_setcc<x86::SETGE>(13, 42));
+    ASSERT_TRUE(test_setcc<x86::SETL>(13, 42));
+    ASSERT_FALSE(test_setcc<x86::SETL>(42, 13));
+    ASSERT_TRUE(test_setcc<x86::SETLE>(13, 42));
+    ASSERT_TRUE(test_setcc<x86::SETLE>(42, 42));
+    ASSERT_FALSE(test_setcc<x86::SETLE>(42, 13));
 }
 
 TEST(X86Asm, JmpCall)

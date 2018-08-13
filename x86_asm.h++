@@ -346,6 +346,14 @@ namespace codegen
                 _indirect = false;
             }
 
+            reg_mem(const symbol *displacement)
+            {
+                _has_index = false;
+                _has_base = false;
+                _indirect = true;
+                _displacement = displacement->clone();
+            }
+
             reg_mem(byte seg, byte width, const integer_reg &r, byte shift, const symbol *displacement = nullptr)
             {
                 _index_shift = shift;
@@ -449,7 +457,7 @@ namespace codegen
             {
                 if (!_indirect) return 0xc0 | _index & 7;
                 byte nbytes = _displacement? _displacement->nbytes() : 0;
-                if (nbytes > 4) throw "TODO!!! Instructions with 64 bit displacement";
+                if (nbytes > 4) argument_mismatch("Illegal 64 bit displacement");
                 if (has_sib())
                 {
                     if (nbytes > 1) return 0x84;
@@ -635,6 +643,12 @@ namespace codegen
             constexpr segment_reg(const segment_reg &r) : reg(r), QWORD(r, 6), DWORD(r, 5), WORD(r, 4), BYTE(r, 3) { }
 
             constexpr segment_reg(byte i) : reg(4, i), QWORD(*this, 6), DWORD(*this, 5), WORD(*this, 4), BYTE(*this, 3) { }
+
+            template<class T> reg_mem operator[](T *ptr) const
+            {
+                auto sym = immediate<std::intptr_t>(reinterpret_cast<std::intptr_t>(ptr));
+                return reg_mem(&sym);
+            }
 
             reg_mem operator[](const integer_reg &r) const
             {
@@ -1289,6 +1303,63 @@ namespace codegen
         using JG = branch_instruction<15>;
         using JNLE = branch_instruction<15>;
 
+        template<byte C> class set_bool_instruction : public instruction
+        {
+            reg_mem _operand;
+
+        public:
+
+            set_bool_instruction(const reg_mem &operand) : _operand(operand) { }
+
+            set_bool_instruction(const integer_reg &reg) : _operand(reg) { }
+
+            instruction *clone() const
+            {
+                return new set_bool_instruction(_operand);
+            }
+
+            void encode(std::vector<byte> &code, int section, reloc *rel, const model &m) const
+            {
+                byte rex = _operand.rex();
+                if (rex) code.push_back(rex);
+                code.push_back(0xf);
+                code.push_back(0x90 | C);
+                code.push_back(_operand.modrm());
+                _operand.write_sib_and_displacement(code, section, rel, m);
+            }
+        };
+
+        using SETO = set_bool_instruction<0>;
+        using SETNO = set_bool_instruction<1>;
+        using SETB = set_bool_instruction<2>;
+        using SETC = set_bool_instruction<2>;
+        using SETNAE = set_bool_instruction<2>;
+        using SETAE = set_bool_instruction<3>;
+        using SETNB = set_bool_instruction<3>;
+        using SETNC = set_bool_instruction<3>;
+        using SETE = set_bool_instruction<4>;
+        using SETZ = set_bool_instruction<4>;
+        using SETNE = set_bool_instruction<5>;
+        using SETNZ = set_bool_instruction<5>;
+        using SETBE = set_bool_instruction<6>;
+        using SETNA = set_bool_instruction<6>;
+        using SETNBE = set_bool_instruction<7>;
+        using SETA = set_bool_instruction<7>;
+        using SETS = set_bool_instruction<8>;
+        using SETNS = set_bool_instruction<9>;
+        using SETP = set_bool_instruction<10>;
+        using SETPE = set_bool_instruction<10>;
+        using SETNP = set_bool_instruction<11>;
+        using SETPO = set_bool_instruction<11>;
+        using SETL = set_bool_instruction<12>;
+        using SETNGE = set_bool_instruction<12>;
+        using SETGE = set_bool_instruction<13>;
+        using SETNL = set_bool_instruction<13>;
+        using SETLE = set_bool_instruction<14>;
+        using SETNG = set_bool_instruction<14>;
+        using SETG = set_bool_instruction<15>;
+        using SETNLE = set_bool_instruction<15>;
+
         template<bool CALL> class jump_instruction : public instruction
         {
             symbol *_target;
@@ -1403,6 +1474,13 @@ namespace codegen
                 else if (imm > 0x7f || imm < -0x80) _immediate = new immediate<std::int16_t>(imm);
                 else _immediate = new immediate<byte>(imm);
             }
+
+            // KLUDGE: An emulated two-address form to make this work as a "normal" two-address
+            // integer instruction. Ideally, of course, we would make use of the three-address form
+            // and avoid a move. But even that is easiest to accomplish by detecting it as a
+            // special case and falling back to ordinary two-address code, meaning that we will
+            // still need this form for x86::gen to compile.
+            IMUL(const integer_reg &x, std::int32_t imm) : IMUL(x, x, imm) { }
 
             IMUL(const integer_reg &x, const integer_reg &y, std::int32_t imm) : IMUL(x, reg_mem(y), imm) { }
 

@@ -1,8 +1,12 @@
+// Nodes that don't take arguments are macro expansions with empty __VA_ARGS__, which, I believe is
+// not legal C++14. This works just fine for me using the CLang version behind Apple's c++ command,
+// whatever that might be, but I suppose some kind of a kludge will be needed for portability.
+
 X(arithmetic, Add, word, word)
 X(arithmetic, Sub, word, word)
 X(arithmetic, Mul, word, word)
 X(arithmetic, Div, word, word)
-X(node, DivMod, word, word, word) // the modulo is written in the first argument
+X(node, DivMod, word, word, word, word) // the modulo is written in the first argument, second is the high word of the dividend
 X(node, MulWiden, word, word, word) // writes the high half of the result to the first argument
 
 X(compare, Gt, word, word)
@@ -20,6 +24,9 @@ X(arithmetic, Neg, word)
 X(arithmetic, Not, word)
 
 X(node, Move, word, word) // destination, source
+
+X(node, Ld, word)
+X(node, St, word, word)
 
 // low-level calls
 X(node, Call, word)
