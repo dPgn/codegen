@@ -46,8 +46,6 @@ namespace codegen
         {
         protected:
 
-            assembler _a;
-
             struct query_reg_mem
             {
                 using rval = reg_mem;
@@ -181,12 +179,59 @@ namespace codegen
                 }
             };
 
+            struct gen_jcc
+            {
+                label _l;
+                assembler &_a;
+                bool _sgnd;
+
+                gen_jcc(assembler &a, label &l, bool sgnd) : _a(a), _l(l), _sgnd(sgnd) { }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::node &)
+                {
+                    throw unsupported_node(code, pos);
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Eq &node)
+                {
+                    _a(JE(_l));
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Neq &node)
+                {
+                    _a(JNE(_l));
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Lt &node)
+                {
+                    if (_sgnd) _a(JL(_l));
+                    else _a(JB(_l));
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Lte &node)
+                {
+                    if (_sgnd) _a(JLE(_l));
+                    else _a(JBE(_l));
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Gt &node)
+                {
+                    if (_sgnd) _a(JG(_l));
+                    else _a(JA(_l));
+                }
+
+                void operator()(const ir::code &code, ir::word pos, const ir::Gte &node)
+                {
+                    if (_sgnd) _a(JGE(_l));
+                    else _a(JAE(_l));
+                }
+            };
+
             struct gen_compare
             {
-                ir::word _dst;
                 assembler &_a;
 
-                gen_compare(assembler &a, ir::word dst) : _a(a), _dst(dst) { }
+                gen_compare(assembler &a) : _a(a) { }
 
                 void operator()(const ir::code &code, ir::word pos, const ir::node &)
                 {
@@ -212,11 +257,11 @@ namespace codegen
                         _a(CMP(ir::x86::integer_reg(dst[1]), code.query_at(query_reg_mem(), s)));
                     else
                         throw unsupported_ir();
-
-                    // TODO: signed/unsigned!!!
-                    code.pass_at(gen_setcc(_a, _dst, false), pos);
                 }
             };
+
+            assembler _a;
+            std::map<ir::word, label> _labels;
 
         public:
 
@@ -226,7 +271,7 @@ namespace codegen
             {
                 auto dst = semantics(code, node[0]);
                 auto src = semantics(code, node[1]);
-                auto dst_type = semantics(code, dst.type());
+                auto dst_type = dst.type();
                 if (dst_type.is<ir::Int>())
                 {
                     if (src.is<ir::arithmetic>())
@@ -235,7 +280,10 @@ namespace codegen
                         code.pass_at(gen_integer_arithmetic(_a, node[0]), node[1]);
                     }
                     else if (src.is<ir::compare>())
-                        code.pass_at(gen_compare(_a, node[0]), node[1]);
+                    {
+                        code.pass_at(gen_compare(_a), node[1]);
+                        code.pass_at(gen_setcc(_a, node[0], semantics(code, src[0]).is_signed()), node[1]);
+                    }
                     else if (dst.is<ir::Reg>())
                     {
                         auto dreg = ir::x86::integer_reg(dst[1]);
@@ -246,6 +294,36 @@ namespace codegen
                     }
                 }
                 // TODO: more than I'd like to admit
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Label &)
+            {
+                _labels[pos] = label(_a);
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Mark &node)
+            {
+                _a(_labels[node[0]]);
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Jump &node)
+            {
+                _a(JMP(_labels[node[0]]));
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Branch &node)
+            {
+                auto cond = semantics(code, node[1]);
+                if (cond.is<ir::compare>())
+                {
+                    code.pass_at(gen_compare(_a), node[1]);
+                    code.pass_at(gen_jcc(_a, _labels[node[0]], semantics(code, cond[0]).is_signed()), node[1]);
+                }
+                else
+                {
+                    _a(CMP(code.query_at(query_reg_mem(), node[1]), 0));
+                    _a(JNZ(_labels[node[0]]));
+                }
             }
 
             void operator()(const ir::code &code, ir::word pos, const ir::Exit &node)

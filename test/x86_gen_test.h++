@@ -68,11 +68,11 @@ TEST(X86Gen, BasicInstructions)
     ASSERT_EQ(42, test_basic<ir::Or>(0xa, 0x22));
 }
 
-template<class NODE> bool test_compare(std::int64_t x, std::int64_t y)
+template<class NODE, bool sgnd = true> bool test_compare(std::int64_t x, std::int64_t y)
 {
     ir::code code;
 
-    auto i64 = code(ir::Int(-64)), b = code(ir::Int(0));
+    auto i64 = code(ir::Int(sgnd? -64 : 64)), b = code(ir::Int(0));
     auto fun = code(ir::Enter(code(ir::Fun(0, b, i64, i64))));
     auto rval = code(ir::RVal(fun));
     auto argx = code(ir::Arg(fun, 0));
@@ -102,10 +102,103 @@ TEST(X86Gen, Compare)
     ASSERT_FALSE(test_compare<ir::Gt>(13, 666));
     ASSERT_FALSE(test_compare<ir::Gte>(13, 666));
 
+    // Unsigned versions should behave as if -1 > 13
+    ASSERT_TRUE((test_compare<ir::Lt, false>(13, -1)));
+    ASSERT_TRUE((test_compare<ir::Lte, false>(13, -1)));
+    ASSERT_FALSE((test_compare<ir::Gt, false>(13, -1)));
+    ASSERT_FALSE((test_compare<ir::Gte, false>(13, -1)));
+
+    // whereas signed versions obviously shouldn't.
+    ASSERT_FALSE(test_compare<ir::Lt>(13, -1));
+    ASSERT_FALSE(test_compare<ir::Lte>(13, -1));
+    ASSERT_TRUE(test_compare<ir::Gt>(13, -1));
+    ASSERT_TRUE(test_compare<ir::Gte>(13, -1));
+
     ASSERT_TRUE(test_compare<ir::Eq>(13, 13));
     ASSERT_FALSE(test_compare<ir::Neq>(13, 13));
     ASSERT_FALSE(test_compare<ir::Lt>(13, 13));
     ASSERT_TRUE(test_compare<ir::Lte>(13, 13));
     ASSERT_FALSE(test_compare<ir::Gt>(13, 13));
     ASSERT_TRUE(test_compare<ir::Gte>(13, 13));
+}
+
+TEST(X86Gen, Jump)
+{
+    ir::code code;
+
+    auto fun = code(ir::Enter(code(ir::Fun(0, code(ir::Int(-64))))));
+    auto rval = code(ir::RVal(fun));
+
+    auto label = code(ir::Label());
+
+    code(ir::Jump(label));
+    code(ir::Move(code(ir::Reg(rval, ir::x86::id(x86::RAX))), code(ir::Imm(69))));
+    code(ir::Exit(fun));
+    code(ir::Mark(label));
+    code(ir::Move(code(ir::Reg(rval, ir::x86::id(x86::RAX))), code(ir::Imm(42))));
+    code(ir::Exit(fun));
+
+    x86::function_gen<std::int64_t()> gen;
+    code.pass(gen);
+    ASSERT_EQ(42, gen.fun()());
+}
+
+template<class NODE, bool sgnd = true> bool test_irbranch(std::int64_t x, std::int64_t y)
+{
+    ir::code code;
+
+    auto i64 = code(ir::Int(sgnd? -64 : 64)), b = code(ir::Int(0));
+    auto fun = code(ir::Enter(code(ir::Fun(0, b, i64, i64))));
+    auto rval = code(ir::RVal(fun));
+    auto argx = code(ir::Arg(fun, 0));
+    auto argy = code(ir::Arg(fun, 1));
+
+    auto label = code(ir::Label());
+
+    auto cond = code(NODE(code(ir::Reg(argx, ir::x86::id(X))), code(ir::Reg(argy, ir::x86::id(Y)))));
+    code(ir::Branch(label, cond));
+    code(ir::Move(code(ir::Reg(rval, ir::x86::id(x86::AL))), code(ir::Imm(0))));
+    code(ir::Exit(fun));
+    code(ir::Mark(label));
+    code(ir::Move(code(ir::Reg(rval, ir::x86::id(x86::AL))), code(ir::Imm(1))));
+    code(ir::Exit(fun));
+
+    x86::function_gen<bool(std::int64_t, std::int64_t)> gen;
+    code.pass(gen);
+    return gen.fun()(x, y);
+}
+
+TEST(X86Gen, Branch)
+{
+    // Exact same tests as in TEST(X86Gen, Compare)
+    ASSERT_FALSE(test_irbranch<ir::Eq>(12345, 123));
+    ASSERT_TRUE(test_irbranch<ir::Neq>(12345, 123));
+    ASSERT_FALSE(test_irbranch<ir::Lt>(12345, 123));
+    ASSERT_FALSE(test_irbranch<ir::Lte>(12345, 123));
+    ASSERT_TRUE(test_irbranch<ir::Gt>(12345, 123));
+    ASSERT_TRUE(test_irbranch<ir::Gte>(12345, 123));
+
+    ASSERT_FALSE(test_irbranch<ir::Eq>(13, 666));
+    ASSERT_TRUE(test_irbranch<ir::Neq>(13, 666));
+    ASSERT_TRUE(test_irbranch<ir::Lt>(13, 666));
+    ASSERT_TRUE(test_irbranch<ir::Lte>(13, 666));
+    ASSERT_FALSE(test_irbranch<ir::Gt>(13, 666));
+    ASSERT_FALSE(test_irbranch<ir::Gte>(13, 666));
+
+    ASSERT_TRUE((test_irbranch<ir::Lt, false>(13, -1)));
+    ASSERT_TRUE((test_irbranch<ir::Lte, false>(13, -1)));
+    ASSERT_FALSE((test_irbranch<ir::Gt, false>(13, -1)));
+    ASSERT_FALSE((test_irbranch<ir::Gte, false>(13, -1)));
+
+    ASSERT_FALSE(test_irbranch<ir::Lt>(13, -1));
+    ASSERT_FALSE(test_irbranch<ir::Lte>(13, -1));
+    ASSERT_TRUE(test_irbranch<ir::Gt>(13, -1));
+    ASSERT_TRUE(test_irbranch<ir::Gte>(13, -1));
+
+    ASSERT_TRUE(test_irbranch<ir::Eq>(13, 13));
+    ASSERT_FALSE(test_irbranch<ir::Neq>(13, 13));
+    ASSERT_FALSE(test_irbranch<ir::Lt>(13, 13));
+    ASSERT_TRUE(test_irbranch<ir::Lte>(13, 13));
+    ASSERT_FALSE(test_irbranch<ir::Gt>(13, 13));
+    ASSERT_TRUE(test_irbranch<ir::Gte>(13, 13));
 }

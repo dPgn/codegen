@@ -44,8 +44,8 @@ X(node, St, word, word, word) // type, address, value
 // identifies either a specific register or a group of registers the actual register must be chosen
 // from by the register allocator. After the register allocation phase, when IR code is passed to
 // the architecture specific code generator, every Reg node must have an id that specifies a single
-// register. Any Reg nodes coming from the client application are ignored by substituting them by
-// their first arguments; Reg nodes are only meant to be used internally by the library.
+// register. Any Reg nodes coming from the client application are ignored by substituting them with
+// their first (value) arguments; Reg nodes are only meant to be used internally by the library.
 X(node, Reg, word, word) // value, id
 
 // low-level control flow

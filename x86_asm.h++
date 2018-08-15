@@ -1137,10 +1137,12 @@ namespace codegen
 
         class label : public symbol
         {
-            assembler *_a;
+            assembler *_a = nullptr;
             std::size_t _index;
 
         public:
+
+            label() { }
 
             label(assembler &a) : _a(&a)
             {
@@ -1474,13 +1476,6 @@ namespace codegen
                 else if (imm > 0x7f || imm < -0x80) _immediate = new immediate<std::int16_t>(imm);
                 else _immediate = new immediate<byte>(imm);
             }
-
-            // KLUDGE: An emulated two-address form to make this work as a "normal" two-address
-            // integer instruction. Ideally, of course, we would make use of the three-address form
-            // and avoid a move. But even that is easiest to accomplish by detecting it as a
-            // special case and falling back to ordinary two-address code, meaning that we will
-            // still need this form for x86::gen to compile.
-            IMUL(const integer_reg &x, std::int32_t imm) : IMUL(x, x, imm) { }
 
             IMUL(const integer_reg &x, const integer_reg &y, std::int32_t imm) : IMUL(x, reg_mem(y), imm) { }
 

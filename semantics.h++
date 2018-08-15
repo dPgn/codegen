@@ -40,25 +40,6 @@ namespace codegen
             }
         };
 
-        struct funarg_query
-        {
-            using rval = ir::word;
-
-            int _index;
-
-            funarg_query(int index) : _index(index) { } // -1 = return value
-
-            rval operator()(const ir::code &code, ir::word pos, const ir::node &node) const
-            {
-                return -1;
-            }
-
-            rval operator()(const ir::code &code, ir::word pos, const ir::Fun &node) const
-            {
-                return node[1 + _index];
-            }
-        };
-
         struct type_query
         {
             using rval = ir::word;
@@ -70,19 +51,17 @@ namespace codegen
 
             rval operator()(const ir::code &code, ir::word pos, const ir::Reg &node) const
             {
-                return semantics(code, node[0]).type();
+                return semantics(code, node[0]).type().pos();
             }
 
             rval operator()(const ir::code &code, ir::word pos, const ir::RVal &node) const
             {
-                auto funtype = semantics(code, node[0]).type();
-                return code.query(funarg_query(-1), funtype);
+                return semantics(code, node[0]).type()[1];
             }
 
             rval operator()(const ir::code &code, ir::word pos, const ir::Arg &node) const
             {
-                auto funtype = semantics(code, node[0]).type();
-                return code.query(funarg_query(node[1]), funtype);
+                return semantics(code, node[0]).type()[2 + node[1]];
             }
 
             rval operator()(const ir::code &code, ir::word pos, const ir::Enter &node) const
@@ -91,19 +70,23 @@ namespace codegen
             }
         };
 
-        struct int64_query
+        struct is_signed_query
         {
-            using rval = std::int_least64_t;
+            using rval = bool;
 
-            template<class NODE> rval operator()(const ir::code &code, ir::word pos, const NODE &node) const
+            rval operator()(const ir::code &code, ir::word pos, const ir::node &node) const
             {
-                // TODO: something nice
-                throw 0;
+                return semantics(code, pos).type().is_signed();
             }
 
-            rval operator()(const ir::code &code, ir::word pos, const ir::Imm &node) const
+            rval operator()(const ir::code &code, ir::word pos, const ir::Int &node) const
             {
-                return node[0];
+                return node[0] < 0;
+            }
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::Float &node) const
+            {
+                return true;
             }
         };
 
@@ -112,7 +95,15 @@ namespace codegen
 
     public:
 
-        semantics(const ir::code &code, ir::word pos) : _code(code), _pos(pos) { }
+        semantics(const ir::code &code, ir::word pos) : _code(code), _pos(pos)
+        {
+            if (pos < 0) throw 0; // TODO: an actual exception
+        }
+
+        ir::word pos() const
+        {
+            return _pos;
+        }
 
         ir::word operator[](ir::word k) const
         {
@@ -121,20 +112,17 @@ namespace codegen
 
         template<class WHAT> bool is() const
         {
-            auto pos = _pos;
-            return _code.query(is_query<WHAT>(), pos);
+            return _code.query_at(is_query<WHAT>(), _pos);
         }
 
-        ir::word type() const
+        semantics type() const
         {
-            auto pos = _pos;
-            return _code.query(type_query(), pos);
+            return semantics(_code, _code.query_at(type_query(), _pos));
         }
 
-        std::int_least64_t int64() const
+        bool is_signed() const
         {
-            auto pos = _pos;
-            return _code.query(int64_query(), pos);
+            return _code.query_at(is_signed_query(), _pos);
         }
     };
 

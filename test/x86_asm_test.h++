@@ -35,6 +35,9 @@
     SSE support, at least enough to have the basic floating point arithmetic for now. Full SIMD
     support up to at least AVX2 should, of course, be implemented, but that can be done later. For
     anything better than AVX2 I will need a newer processor.
+
+    Investigate, why the Source = [R13] case in AddressModes crashes when the test program is
+    compiled with any optimizations on (-O, -O2, -Os, -O3).
 */
 
 TEST(X86Asm, PlainReturn)
@@ -137,7 +140,7 @@ TEST(X86Asm, AddressModes)
     a(x86::MOV(x86::RAX, X));
     a(x86::RET());
 
-    ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link()(17, &n)) << "Source = [RBP]";
+    ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link()(17, &n)) << "Source = [RSP]";
 
     a.clear();
 
@@ -149,7 +152,7 @@ TEST(X86Asm, AddressModes)
     a(x86::MOV(x86::RAX, X));
     a(x86::RET());
 
-    ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link()(17, &n)) << "Source = [RBP]";
+    ASSERT_EQ(42, a.assemble_function<std::int64_t(std::int64_t, std::int64_t *)>().link()(17, &n)) << "Source = [R13]";
 
     a.clear();
 
