@@ -25,12 +25,28 @@ X(arithmetic, Not, word)
 
 X(node, Move, word, word) // destination, source
 
-X(node, Ld, word)
-X(node, St, word, word)
+// Memory access can be written either as
+// Move(Mem(type, dstaddr), src) and Mem(type, srcaddr)
+// or
+// St(type, dstaddr, src) and Ld(type, srcaddr).
+// The sole difference between Mem and Ld is that Ld is read-only; it cannot, for example, be used
+// as the first (destination) operand of a Move. Using Mem is typically more intuitive in a client
+// application and is easier to map to CISC ISAs, while Ld and St are easier handle in optimizers
+// and map directly to native instructions of RISC processors. Client application can freely mix
+// the two equivalent styles, while internally everything is converted into whatever better suits
+// the task at hand.
+X(node, Mem, word, word) // type, address
+X(node, Ld, word, word) // type, address
+X(node, St, word, word, word) // type, address, value
 
-// low-level calls
-X(node, Call, word)
-X(node, Ret)
+// When a value must be in a register, it is wrapped in a node Reg. Semantically, a Reg is the same
+// as its first (value) argument. The second argument is an architecture specific identifier that
+// identifies either a specific register or a group of registers the actual register must be chosen
+// from by the register allocator. After the register allocation phase, when IR code is passed to
+// the architecture specific code generator, every Reg node must have an id that specifies a single
+// register. Any Reg nodes coming from the client application are ignored by substituting them by
+// their first arguments; Reg nodes are only meant to be used internally by the library.
+X(node, Reg, word, word) // value, id
 
 // low-level control flow
 X(node, Label)
@@ -47,7 +63,7 @@ X(node, Tuple, args)  // layout undefined, pointers to members allowed
 X(node, Packed, args) // layout optimized for smallest reasonable memory footprint
 X(node, Union, args)
 X(node, Ptr, word)
-X(node, Fun, word, word, args) // calling convention id (0 = default), return type (0 = none), argument types
+X(node, Fun, word, word, args) // calling convention id (0 = default), return type (-1 = none), argument types
 
 // constants
 X(node, Imm, word) // immediate integer
@@ -57,4 +73,6 @@ X(node, Data, word, args) // type of the data (Tuple, Struct, Packed, or Array),
 // calling conventions
 X(node, Invoke, word, args)
 X(node, Enter, word) // argument is the type of the function, i.e. a Fun node; result is an object of the type
-X(node, Exit, word, word) // function to exit, return value (0 if no return value)
+X(node, Exit, word) // function to exit
+X(node, Arg, word, word) // function whose argument to read, index
+X(node, RVal, word) // function

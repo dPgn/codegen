@@ -40,6 +40,57 @@ namespace codegen
             }
         };
 
+        struct funarg_query
+        {
+            using rval = ir::word;
+
+            int _index;
+
+            funarg_query(int index) : _index(index) { } // -1 = return value
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::node &node) const
+            {
+                return -1;
+            }
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::Fun &node) const
+            {
+                return node[1 + _index];
+            }
+        };
+
+        struct type_query
+        {
+            using rval = ir::word;
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::node &node) const
+            {
+                return -1;
+            }
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::Reg &node) const
+            {
+                return semantics(code, node[0]).type();
+            }
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::RVal &node) const
+            {
+                auto funtype = semantics(code, node[0]).type();
+                return code.query(funarg_query(-1), funtype);
+            }
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::Arg &node) const
+            {
+                auto funtype = semantics(code, node[0]).type();
+                return code.query(funarg_query(node[1]), funtype);
+            }
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::Enter &node) const
+            {
+                return node[0];
+            }
+        };
+
         struct int64_query
         {
             using rval = std::int_least64_t;
@@ -56,10 +107,6 @@ namespace codegen
             }
         };
 
-        struct type_query
-        {
-        };
-
         const ir::code &_code;
         ir::word _pos;
 
@@ -67,10 +114,21 @@ namespace codegen
 
         semantics(const ir::code &code, ir::word pos) : _code(code), _pos(pos) { }
 
+        ir::word operator[](ir::word k) const
+        {
+            return _code.arg(_pos, k);
+        }
+
         template<class WHAT> bool is() const
         {
             auto pos = _pos;
             return _code.query(is_query<WHAT>(), pos);
+        }
+
+        ir::word type() const
+        {
+            auto pos = _pos;
+            return _code.query(type_query(), pos);
         }
 
         std::int_least64_t int64() const

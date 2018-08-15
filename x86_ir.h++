@@ -32,18 +32,16 @@ namespace codegen
 
             static constexpr ir::word id(const x86::integer_reg &r)
             {
-                return -(r.index() | (r.log2bits() << 5));
+                return r.index() | (r.log2bits() << 5);
             }
 
             static constexpr bool is_integer_reg(ir::word id)
             {
-                id = -id;
                 return id >= (3 << 5) && id < ((6 << 5) | 0x16); // TODO: filter out all with bit 4 set apart from 8 bit high half regs
             }
 
             static constexpr x86::integer_reg integer_reg(ir::word id)
             {
-                id = -id;
                 return x86::integer_reg(id >> 5, id & 0x1f);
             }
         }

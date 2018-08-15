@@ -420,6 +420,11 @@ namespace codegen
                 return r;
             }
 
+            template<class F> auto query_at(const F &f, word index) const -> typename F::rval
+            {
+                return query(f, index);
+            }
+
             vnode *read(word &index) const
             {
                 return query(vnode_query(), index);
@@ -446,6 +451,20 @@ namespace codegen
             template<class F> void pass(F &f) const
             {
                 for (word index = 0; index < _buf.size(); pass(f, index));
+            }
+
+            template<class F> void pass_at(F f, word index) const
+            {
+                return pass(f, index);
+            }
+
+            word arg(word index, word k) const
+            {
+                _buf.read(index);
+                _buf.read(index);
+                word x = _buf.read(index);
+                while (k--) x = _buf.read(index);
+                return x;
             }
 
             word size() const
