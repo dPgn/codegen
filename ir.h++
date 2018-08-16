@@ -204,6 +204,8 @@ namespace codegen
             }
         };
 
+        struct nothing { };
+
         template<class... ARGS> struct node_args
         {
             word operator[](unsigned) const
@@ -216,6 +218,26 @@ namespace codegen
             {
                 // TODO: throw something sensible
                 throw 0;
+            }
+
+            word nargs() const
+            {
+                return 0;
+            }
+        };
+
+        template<> struct node_args<nothing>
+        {
+            node_args() { }
+
+            word operator[](unsigned k) const
+            {
+                throw 0; // TODO: ...
+            }
+
+            word &operator[](unsigned k)
+            {
+                throw 0; // TODO: ...
             }
 
             word nargs() const
@@ -319,7 +341,6 @@ namespace codegen
             std::string name() const { return #name_; } \
         };
 #       include "ir_nodes.def"
-#       undef X
 
         struct vnode
         {
@@ -411,7 +432,6 @@ namespace codegen
                     r = f(*this, pos, name(_buf, index, nargs)); \
                     break;
 #               include "ir_nodes.def"
-#               undef X
                     default:
                         // TODO: throw something
                         ;
@@ -440,7 +460,6 @@ namespace codegen
                     f(*this, pos, name(_buf, index, nargs)); \
                     break;
 #               include "ir_nodes.def"
-#               undef X
                     default:
                         // TODO: throw something
                         ;
@@ -475,6 +494,11 @@ namespace codegen
             void clear()
             {
                 _buf.clear();
+            }
+
+            std::string text() const
+            {
+                return ""; // TODO: !!!
             }
         };
 

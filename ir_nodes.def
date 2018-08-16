@@ -49,7 +49,7 @@ X(node, St, word, word, word) // type, address, value
 X(node, Reg, word, word) // value, id
 
 // low-level control flow
-X(node, Label)
+X(node, Label, nothing)
 X(node, Mark, word)
 X(node, Branch, word, word) // label, condition
 X(node, Jump, word)
@@ -65,14 +65,32 @@ X(node, Union, args)
 X(node, Ptr, word)
 X(node, Fun, word, word, args) // calling convention id (0 = default), return type (-1 = none), argument types
 
+// element access
+X(node, Element, word, word) // object, index; index must be Imm for Struct, Tuple, Packed, and Union
+
 // constants
 X(node, Imm, word) // immediate integer
 X(node, Str, args) // args are the characters
 X(node, Data, word, args) // type of the data (Tuple, Struct, Packed, or Array), elements in order
 
 // calling conventions
+// TODO: figure out how to make use of red zones
 X(node, Invoke, word, args)
-X(node, Enter, word) // argument is the type of the function, i.e. a Fun node; result is an object of the type
+X(node, Enter, word, args) // first argument is the type of the function, i.e. a Fun node; result is an object of the type; args are local variables (types)
 X(node, Exit, word) // function to exit
 X(node, Arg, word, word) // function whose argument to read, index
 X(node, RVal, word) // function
+X(node, Slot, word, word) // address of a local variable: function, index
+
+// For debugging and implementing garbage collectors and zero-overhead exception handling. The
+// second argument of Trace is an application specific identifier opaque to the codegen library and
+// merely passed to a handler when execution is interrupted to read the values. The third argument
+// is the value passed. The generated code is not required to actually store the value at run time,
+// as long as it is able to reconstruct it when requested. This allows stack map like functionality
+// without interfering with optimizations. Untrace takes the Trace node as an argument and ends the
+// tracing. All remaining Trace nodes associated with a function are implicitly untraced at return
+// (Exit node).
+X(node, Trace, word, word, word) // function, id, value
+X(node, Untrace, word)
+
+#undef X

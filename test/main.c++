@@ -37,6 +37,8 @@ using namespace codegen;
 #include "x86_asm_test.h++"
 #include "x86_gen_test.h++"
 
+#include "textual_test.h++"
+
 int main(int argc, char *argv[])
 {
     testing::InitGoogleTest(&argc, argv);
