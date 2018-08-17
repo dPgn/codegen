@@ -1,29 +1,25 @@
-// Nodes that don't take arguments are macro expansions with empty __VA_ARGS__, which, I believe is
-// not legal C++14. This works just fine for me using the CLang version behind Apple's c++ command,
-// whatever that might be, but I suppose some kind of a kludge will be needed for portability.
+X(arithmetic, Add, nodeid, nodeid)
+X(arithmetic, Sub, nodeid, nodeid)
+X(arithmetic, Mul, nodeid, nodeid)
+X(arithmetic, Div, nodeid, nodeid)
+X(node, DivMod, nodeid, nodeid, nodeid, nodeid) // the modulo is written in the first argument, second is the high word of the dividend
+X(node, MulWiden, nodeid, nodeid, nodeid) // writes the high half of the result to the first argument
 
-X(arithmetic, Add, word, word)
-X(arithmetic, Sub, word, word)
-X(arithmetic, Mul, word, word)
-X(arithmetic, Div, word, word)
-X(node, DivMod, word, word, word, word) // the modulo is written in the first argument, second is the high word of the dividend
-X(node, MulWiden, word, word, word) // writes the high half of the result to the first argument
+X(compare, Gt, nodeid, nodeid)
+X(compare, Lt, nodeid, nodeid)
+X(compare, Gte, nodeid, nodeid)
+X(compare, Lte, nodeid, nodeid)
+X(compare, Eq, nodeid, nodeid)
+X(compare, Neq, nodeid, nodeid)
 
-X(compare, Gt, word, word)
-X(compare, Lt, word, word)
-X(compare, Gte, word, word)
-X(compare, Lte, word, word)
-X(compare, Eq, word, word)
-X(compare, Neq, word, word)
+X(arithmetic, And, nodeid, nodeid)
+X(arithmetic, Or, nodeid, nodeid)
+X(arithmetic, Xor, nodeid, nodeid)
 
-X(arithmetic, And, word, word)
-X(arithmetic, Or, word, word)
-X(arithmetic, Xor, word, word)
+X(arithmetic, Neg, nodeid)
+X(arithmetic, Not, nodeid)
 
-X(arithmetic, Neg, word)
-X(arithmetic, Not, word)
-
-X(node, Move, word, word) // destination, source
+X(node, Move, nodeid, nodeid) // destination, source
 
 // Memory access can be written either as
 // Move(Mem(type, dstaddr), src) and Mem(type, srcaddr)
@@ -35,38 +31,42 @@ X(node, Move, word, word) // destination, source
 // and map directly to native instructions of RISC processors. Client application can freely mix
 // the two equivalent styles, while internally everything is converted into whatever better suits
 // the task at hand.
-X(node, Mem, word, word) // type, address
-X(node, Ld, word, word) // type, address
-X(node, St, word, word, word) // type, address, value
+X(node, Mem, nodeid, nodeid) // type, address
+X(node, Ld, nodeid, nodeid) // type, address
+X(node, St, nodeid, nodeid, nodeid) // type, address, value
 
 // When a value must be in a register, it is wrapped in a node Reg. Semantically, a Reg is the same
-// as its first (value) argument. The second argument is an architecture specific identifier that
+// as its first (value) argument. The second argument is an architecture specific key that
 // identifies either a specific register or a group of registers the actual register must be chosen
 // from by the register allocator. After the register allocation phase, when IR code is passed to
-// the architecture specific code generator, every Reg node must have an id that specifies a single
+// the architecture specific code generator, every Reg node must have a key that specifies a single
 // register. Any Reg nodes coming from the client application are ignored by substituting them with
 // their first (value) arguments; Reg nodes are only meant to be used internally by the library.
-X(node, Reg, word, word) // value, id
+X(node, Reg, nodeid, word) // value, key
 
 // low-level control flow
 X(node, Label, nothing)
-X(node, Mark, word)
-X(node, Branch, word, word) // label, condition
-X(node, Jump, word)
+X(node, Mark, nodeid)
+X(node, Branch, nodeid, nodeid) // label, condition
+X(node, Jump, nodeid)
 
 // type constructors
-X(node, Int, word) // negative signed, positive unsigned, absolute value = number of bits; 0 = boolean
-X(node, Float, word, word, word, word) // base, min exponent, max exponent, significant digits
-X(node, Array, word, word) // element type, size
-X(node, Struct, args) // layout should be compatible with C structs on the platform
-X(node, Tuple, args)  // layout undefined, pointers to members allowed
-X(node, Packed, args) // layout optimized for smallest reasonable memory footprint
-X(node, Union, args)
-X(node, Ptr, word)
-X(node, Fun, word, word, args) // calling convention id (0 = default), return type (-1 = none), argument types
+X(typecon, Int, word) // negative signed, positive unsigned, absolute value = number of bits; 0 = boolean
+X(typecon, Float, word, word, word, word) // base, min exponent, max exponent, significant digits
+X(typecon, Array, nodeid, word) // element type, size
+X(typecon, Struct, args) // layout should be compatible with C structs on the platform
+X(typecon, Tuple, args)  // layout undefined, pointers to members allowed
+X(typecon, Packed, args) // layout optimized for smallest reasonable memory footprint
+X(typecon, Union, args)
+X(typecon, Ptr, nodeid)
+X(typecon, Fun, word, nodeid, args) // calling convention id (0 = default), return type (-1 = none), argument types
 
 // element access
-X(node, Element, word, word) // object, index; index must be Imm for Struct, Tuple, Packed, and Union
+X(node, Element, nodeid, nodeid) // object, index; index must be Imm for Struct, Tuple, Packed, and Union
+
+// casts and conversion (type, value)
+X(node, Cast, nodeid, nodeid) // reinterpret_cast
+X(node, Conv, nodeid, nodeid) // number type conversions
 
 // constants
 X(node, Imm, word) // immediate integer
@@ -75,22 +75,22 @@ X(node, Data, word, args) // type of the data (Tuple, Struct, Packed, or Array),
 
 // calling conventions
 // TODO: figure out how to make use of red zones
-X(node, Invoke, word, args)
-X(node, Enter, word, args) // first argument is the type of the function, i.e. a Fun node; result is an object of the type; args are local variables (types)
-X(node, Exit, word) // function to exit
-X(node, Arg, word, word) // function whose argument to read, index
-X(node, RVal, word) // function
-X(node, Slot, word, word) // address of a local variable: function, index
+X(node, Invoke, nodeid, args)
+X(node, Enter, nodeid, args) // first argument is the type of the function, i.e. a Fun node; result is an object of the type; args are local variables (types)
+X(node, Exit, nodeid) // function to exit
+X(node, Arg, nodeid, word) // function whose argument to read, index
+X(node, RVal, nodeid) // function
+X(node, Slot, nodeid, word) // address of a local variable: function, index
 
 // For debugging and implementing garbage collectors and zero-overhead exception handling. The
-// second argument of Trace is an application specific identifier opaque to the codegen library and
-// merely passed to a handler when execution is interrupted to read the values. The third argument
-// is the value passed. The generated code is not required to actually store the value at run time,
-// as long as it is able to reconstruct it when requested. This allows stack map like functionality
+// second argument of Trace is an application specific key opaque to the codegen library and merely
+// passed to a handler when execution is interrupted to read the values. The third argument is the
+// value passed. The generated code is not required to actually store the value at run time, as
+// long as it is able to reconstruct it when requested. This allows stack map like functionality
 // without interfering with optimizations. Untrace takes the Trace node as an argument and ends the
 // tracing. All remaining Trace nodes associated with a function are implicitly untraced at return
 // (Exit node).
-X(node, Trace, word, word, word) // function, id, value
-X(node, Untrace, word)
+X(node, Trace, nodeid, word, nodeid) // function, key, value
+X(node, Untrace, nodeid)
 
 #undef X

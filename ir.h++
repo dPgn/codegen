@@ -204,7 +204,9 @@ namespace codegen
             }
         };
 
+        // only to be used as argument types in ir_nodes.def
         struct nothing { };
+        struct nodeid { };
 
         template<class... ARGS> struct node_args
         {
@@ -244,6 +246,11 @@ namespace codegen
             {
                 return 0;
             }
+
+            static bool is_id(unsigned)
+            {
+                return false;
+            }
         };
 
         template<> struct node_args<word>
@@ -266,9 +273,26 @@ namespace codegen
                 return _last;
             }
 
+            static bool is_id(unsigned k)
+            {
+                return false;
+            }
+
             word nargs() const
             {
                 return 1;
+            }
+        };
+
+        template<> struct node_args<nodeid> : node_args<word>
+        {
+            node_args() { }
+
+            node_args(word last) : node_args<word>(last) { }
+
+            static bool is_id(unsigned k)
+            {
+                return true;
             }
         };
 
@@ -288,6 +312,11 @@ namespace codegen
             word &operator[](unsigned k)
             {
                 return _args[k];
+            }
+
+            static bool is_id(unsigned k)
+            {
+                return true;
             }
 
             word nargs() const
@@ -315,17 +344,60 @@ namespace codegen
                 return k? _rest[k - 1] : _first;
             }
 
+            static bool is_id(unsigned k)
+            {
+                return k? node_args<ARGS...>::is_id(k - 1) : false;
+            }
+
             word nargs() const
             {
                 return 1 + _rest.nargs();
             }
         };
 
-        struct node { };
+        template<class... ARGS> struct node_args<nodeid, ARGS...> : node_args<word, ARGS...>
+        {
+            node_args() { }
 
-        struct arithmetic : node { };
+            template<class... REST> node_args(word first, REST... rest) : node_args<word, ARGS...>(first, rest...) { }
 
-        struct compare : node { };
+            static bool is_id(unsigned k)
+            {
+                return k? node_args<ARGS...>::is_id(k - 1) : true;
+            }
+        };
+
+        struct node
+        {
+            bool is_pure() const
+            {
+                return false;
+            }
+        };
+
+        struct arithmetic : node
+        {
+            bool is_pure() const
+            {
+                return true;
+            }
+        };
+
+        struct compare : node
+        {
+            bool is_pure() const
+            {
+                return true;
+            }
+        };
+
+        struct typecon : node
+        {
+            bool is_pure() const
+            {
+                return true;
+            }
+        };
 
 #       define X(base,name_,...) \
         class name_ : public base \
@@ -339,6 +411,7 @@ namespace codegen
             word &operator[](unsigned k) { return _args[k]; } \
             word nargs() const { return _args.nargs(); } \
             std::string name() const { return #name_; } \
+            bool is_id(unsigned k) const { return node_args<__VA_ARGS__>::is_id(k); } \
         };
 #       include "ir_nodes.def"
 
@@ -351,6 +424,10 @@ namespace codegen
             virtual word nargs() const = 0;
 
             virtual std::string name() const = 0;
+
+            virtual bool is_id(unsigned k) const = 0;
+
+            virtual bool is_pure() const = 0;
         };
 
         template<class NODE> class vnode_impl : public vnode
@@ -380,9 +457,26 @@ namespace codegen
             {
                 return _node.name();
             }
+
+            bool is_id(unsigned k) const
+            {
+                return _node.is_id(k);
+            }
+
+            bool is_pure() const
+            {
+                return _node.is_pure();
+            }
         };
 
         class code;
+
+        struct skip_query
+        {
+            using rval = int;
+
+            template<class NODE> rval operator()(const code &, word, const NODE &node) const { }
+        };
 
         struct vnode_query
         {
@@ -450,6 +544,17 @@ namespace codegen
                 return query(vnode_query(), index);
             }
 
+            vnode *read_at(word index) const
+            {
+                return read(index);
+            }
+
+            bool next(word &index) const
+            {
+                query(skip_query(), index);
+                return index < size();
+            }
+
             template<class F> void pass(F &f, word &index) const
             {
                 word pos = index;
@@ -496,9 +601,71 @@ namespace codegen
                 _buf.clear();
             }
 
+        private:
+
+            std::string node_text(word pos, const std::set<word> &onedef, std::map<word, word> &symmap, unsigned depth = 0) const
+            {
+                std::stringstream ss;
+                auto &n = *read_at(pos);
+                ss << "[ ";
+                auto sym = symmap.find(pos);
+                if (sym != symmap.end()) ss << n.name() << "_" << sym->second << ": ";
+                ss << n.name() << std::endl;
+                for (unsigned i = 0; i < n.nargs(); ++i)
+                {
+                    ss << std::string(depth * 2 + 2, ' ');
+                    if (n.is_id(i))
+                        if (onedef.count(n[i])) ss << node_text(n[i], onedef, symmap, depth + 1);
+                        else
+                        {
+                            auto r = read_at(n[i]);
+                            ss << r->name() << "_" << symmap[n[i]] << std::endl;
+                            delete r;
+                        }
+                    else
+                        ss << n[i] << std::endl;
+                }
+                ss << std::string(depth * 2, ' ') << ']' << std::endl;
+                delete &n;
+                return ss.str();
+            }
+
+        public:
+
             std::string text() const
             {
-                return ""; // TODO: !!!
+                std::stringstream ss;
+                std::set<word> onedef;
+                std::map<word, word> symmap;
+                std::map<word, word> idmap;
+                for (word pos = 0; pos < size(); )
+                {
+                    auto &n = *read(pos);
+                    for (unsigned i = 0; i < n.nargs(); ++i)
+                        if (n.is_id(i) && !symmap.count(n[i]))
+                        {
+                            auto r = read_at(n[i]);
+                            if (r->is_pure())
+                            {
+                                auto od = onedef.find(n[i]);
+                                if (od == onedef.end())
+                                {
+                                    onedef.insert(n[i]);
+                                    delete r;
+                                    continue;
+                                }
+                                else onedef.erase(od);
+                            }
+                            word id;
+                            if (idmap.count(r->id())) id = idmap[r->id()]++;
+                            else idmap[r->id()] = id = 0;
+                            symmap[n[i]] = id;
+                            delete r;
+                        }
+                    delete &n;
+                }
+                for (word pos = 0; pos < size(); next(pos) ) if (!onedef.count(pos)) ss << node_text(pos, onedef, symmap);
+                return ss.str();
             }
         };
 

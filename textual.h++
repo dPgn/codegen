@@ -1,3 +1,21 @@
+/*
+    codegen – a dynamic code generation library
+
+    Copyright 2018 Oskari Teirilä
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+*/
+
 #include "ir.h++"
 
 #include <unordered_map>
@@ -79,7 +97,7 @@ namespace codegen
             _code(node);
         }
 
-        template<class IT, class NODE> void handle(IT &it, const IT &end)
+        template<class IT, class NODE> ir::word handle(IT &it, const IT &end)
         {
             NODE node;
             unsigned k = 0;
@@ -95,10 +113,7 @@ namespace codegen
                     node[k++] = get_number(get_sym(it, end), it);
                 }
                 else if (*it == '[')
-                {
-                    node[k++] = _code.size();
-                    handle_block(++it, end);
-                }
+                    node[k++] = handle_block(++it, end);
                 else
                 {
                     auto start = it;
@@ -109,28 +124,34 @@ namespace codegen
                 }
                 skip_whitespace(it, end);
             }
+            auto pos = _code.size();
             _code(node);
+            return pos;
         }
 
-        template<class IT> void handle_block(IT &it, const IT &end)
+        template<class IT> ir::word handle_block(IT &it, const IT &end)
         {
             IT start = it;
             std::string sym;
+            std::vector<std::string> ids;
             for (;;)
             {
                 skip_whitespace(it, end);
                 sym = get_sym(it, end);
                 skip_whitespace(it, end);
                 if (it == end || *it != ':') break;
-                _symtable[sym] = _code.size();
+                ids.push_back(sym);
                 ++it;
             }
-            if (sym[0] == '-' || sym[0] >= '0' && sym[0] <= '9') _code(ir::Imm(get_number(sym, it)));
-#           define X(base,name,...) else if (sym == #name) handle<IT, ir::name>(it, end);
+            ir::word pos;
+            if (sym[0] == '-' || sym[0] >= '0' && sym[0] <= '9') pos = _code(ir::Imm(get_number(sym, it)));
+#           define X(base,name,...) else if (sym == #name) pos = handle<IT, ir::name>(it, end);
 #           include "ir_nodes.def"
             else throw syntax_error<IT> { start };
             if (it == end || *it != ']') throw syntax_error<IT> { it };
             ++it;
+            for (auto id : ids) _symtable[id] = pos;
+            return pos;
         }
 
         template<class IT> void parse(IT &it, const IT &end)
