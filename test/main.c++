@@ -38,6 +38,7 @@ using namespace codegen;
 #include "x86_gen_test.h++"
 
 #include "textual_test.h++"
+#include "control_test.h++"
 
 int main(int argc, char *argv[])
 {

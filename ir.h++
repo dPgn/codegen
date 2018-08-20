@@ -375,7 +375,7 @@ namespace codegen
             }
         };
 
-        struct arithmetic : node
+        struct purenode : node
         {
             bool is_pure() const
             {
@@ -383,21 +383,11 @@ namespace codegen
             }
         };
 
-        struct compare : node
-        {
-            bool is_pure() const
-            {
-                return true;
-            }
-        };
+        struct arithmetic : purenode { };
 
-        struct typecon : node
-        {
-            bool is_pure() const
-            {
-                return true;
-            }
-        };
+        struct compare : purenode { };
+
+        struct typecon : purenode { };
 
 #       define X(base,name_,...) \
         class name_ : public base \
@@ -657,7 +647,7 @@ namespace codegen
                                 else onedef.erase(od);
                             }
                             word id;
-                            if (idmap.count(r->id())) id = idmap[r->id()]++;
+                            if (idmap.count(r->id())) id = ++idmap[r->id()];
                             else idmap[r->id()] = id = 0;
                             symmap[n[i]] = id;
                             delete r;

@@ -20,5 +20,6 @@
 #define CODEGEN_H
 
 #include "x86_gen.h++"
+#include "control.h++"
 
 #endif

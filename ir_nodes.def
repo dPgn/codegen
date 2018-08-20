@@ -42,13 +42,28 @@ X(node, St, nodeid, nodeid, nodeid) // type, address, value
 // the architecture specific code generator, every Reg node must have a key that specifies a single
 // register. Any Reg nodes coming from the client application are ignored by substituting them with
 // their first (value) arguments; Reg nodes are only meant to be used internally by the library.
-X(node, Reg, nodeid, word) // value, key
+X(purenode, Reg, nodeid, word) // value, key
 
-// low-level control flow
+// Unstructured control flow is used both at the lowest (architecture) level and the highest
+// (application) level. It is intuitive to programmers and maps nicely to how things work in
+// machine code, but it is problematic to handle in optimizers, so it is converted to the
+// structured variation below internally, and then back.
 X(node, Label, nothing)
 X(node, Mark, nodeid)
 X(node, Branch, nodeid, nodeid) // label, condition
 X(node, Jump, nodeid)
+
+// Structured control flow is used internally by optimizers. Most compiler back-ends generate a
+// control flow graph and analyze it. I find that too complicated, so instead I replace the free
+// unstructured branches with three trivial primitives: conditional and unconditional forward jumps
+// (Skip and SkipIf, Here), and uncoditional ("infinite") loops (Forever/Repeat). While the Repeat
+// node does take the beginning of the loop (the Forever node) as an argument, it MUST refer to the
+// last unclosed loop. In other words, loops can be nested, but they cannot partially overlap.
+X(node, Skip, nothing)
+X(node, SkipIf, nodeid)
+X(node, Here, nodeid) // argument is Skip or SkipIf
+X(node, Forever, nothing)
+X(node, Repeat, nodeid) // argument is the Forever node
 
 // type constructors
 X(typecon, Int, word) // negative signed, positive unsigned, absolute value = number of bits; 0 = boolean
@@ -62,25 +77,31 @@ X(typecon, Ptr, nodeid)
 X(typecon, Fun, word, nodeid, args) // calling convention id (0 = default), return type (-1 = none), argument types
 
 // element access
-X(node, Element, nodeid, nodeid) // object, index; index must be Imm for Struct, Tuple, Packed, and Union
+X(purenode, Element, nodeid, nodeid) // object, index; index must be Imm for Struct, Tuple, Packed, and Union
 
 // casts and conversion (type, value)
-X(node, Cast, nodeid, nodeid) // reinterpret_cast
-X(node, Conv, nodeid, nodeid) // number type conversions
+X(purenode, Cast, nodeid, nodeid) // reinterpret_cast
+X(purenode, Conv, nodeid, nodeid) // number type conversions
 
 // constants
-X(node, Imm, word) // immediate integer
-X(node, Str, args) // args are the characters
-X(node, Data, word, args) // type of the data (Tuple, Struct, Packed, or Array), elements in order
+X(purenode, Imm, word) // immediate integer
+X(purenode, Str, args) // args are the characters
+X(purenode, Data, word, args) // type of the data (Tuple, Struct, Packed, or Array), elements in order
 
 // calling conventions
 // TODO: figure out how to make use of red zones
 X(node, Invoke, nodeid, args)
 X(node, Enter, nodeid, args) // first argument is the type of the function, i.e. a Fun node; result is an object of the type; args are local variables (types)
 X(node, Exit, nodeid) // function to exit
-X(node, Arg, nodeid, word) // function whose argument to read, index
-X(node, RVal, nodeid) // function
-X(node, Slot, nodeid, word) // address of a local variable: function, index
+X(purenode, Arg, nodeid, word) // function whose argument to read, index
+X(purenode, RVal, nodeid) // function
+X(purenode, Slot, nodeid, word) // address of a local variable: function, index
+
+// Register allocator can remove local variables from the frame if they fit into the registers. The
+// Slot nodes that were associated with the removed local variables must be substituted with
+// something else that can be used as the value arguments of the Reg nodes. Temp nodes exist
+// specifically for the purpose. They are meant for internal use of the library only.
+X(purenode, Temp, nodeid)
 
 // For debugging and implementing garbage collectors and zero-overhead exception handling. The
 // second argument of Trace is an application specific key opaque to the codegen library and merely
