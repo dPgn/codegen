@@ -50,3 +50,43 @@ TEST(Control, Structurize)
 
     ASSERT_EQ(control::structurized<ir::code>(textual(unstructured).code()).text(), textual(structured).code().text());
 }
+
+TEST(Control, Unstructurize)
+{
+    // Copy-pasted from above
+    std::string structured =
+        "[ i64: Int -64 ]"
+        "[ fun: Enter [ Fun 0 i64 i64 i64 ] ]"
+        "[ a: Forever ]"
+        "[ Move [ RVal fun ] [ Arg fun 0 ] ]"
+        "[ b: Forever ]"
+        "[ c: SkipIf [ Not [ Gt [ Arg fun 1 ] [ Arg fun 0 ] ] ] ]"
+        "[ d: Skip ]"
+        "[ Here c ]"
+        "[ Move [ RVal fun ] [ Arg fun 1 ] ]"
+        "[ e: SkipIf [ Not [ Eq [ Arg fun 1 ] [ Arg fun 0 ] ] ] ]"
+        "[ Repeat b ]"
+        "[ Here e ]"
+        "[ Here d ]"
+        "[ Repeat a ]"
+        "[ Exit fun ]";
+
+    std::string unstructured =
+        "[ i64: Int -64 ]"
+        "[ fun: Enter [ Fun 0 i64 i64 i64 ] ]"
+        "[ a: Label ] [ Mark a ]"
+        "[ Move [ RVal fun ] [ Arg fun 0 ] ]"
+        "[ b: Label ] [ Mark b ]"
+        "[ c: Label ] [ Branch c [ Not [ Gt [ Arg fun 1 ] [ Arg fun 0 ] ] ] ]"
+        "[ d: Label ] [ Jump d ]"
+        "[ Mark c ]"
+        "[ Move [ RVal fun ] [ Arg fun 1 ] ]"
+        "[ e: Label ] [ Branch e [ Not [ Eq [ Arg fun 1 ] [ Arg fun 0 ] ] ] ]"
+        "[ Jump b ]"
+        "[ Mark e ]"
+        "[ Mark d ]"
+        "[ Jump a ]"
+        "[ Exit fun ]";
+
+    ASSERT_EQ(control::unstructurized<ir::code>(textual(structured).code()).text(), textual(unstructured).code().text());
+}

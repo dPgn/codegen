@@ -122,8 +122,43 @@ namespace codegen
             }
         };
 
-        struct unstrcturizer
+        template<class OUT> struct unstructurizer
         {
+            remapper<OUT> _out;
+
+            unstructurizer(OUT &out) : _out(remapper<OUT>(out)) { }
+
+            template<class NODE> void operator()(const ir::code &code, ir::word pos, const NODE &node)
+            {
+                _out(pos, node);
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Forever &node)
+            {
+                _out(ir::Mark(_out(pos, ir::Label())));
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Repeat &node)
+            {
+                _out(ir::Jump(node[0]));
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Skip &node)
+            {
+                _out(pos, ir::Label());
+                _out(ir::Jump(pos));
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::SkipIf &node)
+            {
+                _out(pos, ir::Label());
+                _out(ir::Branch(pos, node[0]));
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Here &node)
+            {
+                _out(ir::Mark(node[0]));
+            }
         };
 
         template<class OUT> void structurize(OUT &out, const ir::code &code)
@@ -141,6 +176,18 @@ namespace codegen
             return out;
         }
 
+        template<class OUT> void unstructurize(OUT &out, const ir::code &code)
+        {
+            unstructurizer<OUT> u(out);
+            code.pass(u);
+        }
+
+        template<class OUT> OUT unstructurized(const ir::code &code)
+        {
+            OUT out;
+            unstructurize(out, code);
+            return out;
+        }
     }
 }
 
