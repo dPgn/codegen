@@ -20,6 +20,10 @@
 #define CODEGEN_H
 
 #include "x86_gen.h++"
+#include "x86_rtl.h++"
+#include "x86_regs.h++"
+
 #include "control.h++"
+#include "ra.h++"
 
 #endif

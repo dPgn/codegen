@@ -49,9 +49,19 @@ namespace codegen
                 return -1;
             }
 
+            rval operator()(const ir::code &code, ir::word pos, const ir::arithmetic &node) const
+            {
+                return semantics(code, semantics(code, pos)[0]).type().pos();
+            }
+
             rval operator()(const ir::code &code, ir::word pos, const ir::Reg &node) const
             {
                 return semantics(code, node[0]).type().pos();
+            }
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::Temp &node) const
+            {
+                return node[0];
             }
 
             rval operator()(const ir::code &code, ir::word pos, const ir::RVal &node) const

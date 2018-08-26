@@ -2,8 +2,8 @@ X(arithmetic, Add, nodeid, nodeid)
 X(arithmetic, Sub, nodeid, nodeid)
 X(arithmetic, Mul, nodeid, nodeid)
 X(arithmetic, Div, nodeid, nodeid)
-X(node, DivMod, nodeid, nodeid, nodeid, nodeid) // the modulo is written in the first argument, second is the high word of the dividend
-X(node, MulWiden, nodeid, nodeid, nodeid) // writes the high half of the result to the first argument
+X(wrnode, DivMod, nodeid, nodeid, nodeid, nodeid) // the modulo is written in the first argument, second is the high word of the dividend
+X(wrnode, MulWiden, nodeid, nodeid, nodeid) // writes the high half of the result to the first argument
 
 X(compare, Gt, nodeid, nodeid)
 X(compare, Lt, nodeid, nodeid)
@@ -19,21 +19,17 @@ X(arithmetic, Xor, nodeid, nodeid)
 X(arithmetic, Neg, nodeid)
 X(arithmetic, Not, nodeid)
 
-X(node, Move, nodeid, nodeid) // destination, source
+X(wrnode, Move, nodeid, nodeid) // destination, source
 
-// Memory access can be written either as
-// Move(Mem(type, dstaddr), src) and Mem(type, srcaddr)
-// or
-// St(type, dstaddr, src) and Ld(type, srcaddr).
-// The sole difference between Mem and Ld is that Ld is read-only; it cannot, for example, be used
-// as the first (destination) operand of a Move. Using Mem is typically more intuitive in a client
-// application and is easier to map to CISC ISAs, while Ld and St are easier handle in optimizers
-// and map directly to native instructions of RISC processors. Client application can freely mix
-// the two equivalent styles, while internally everything is converted into whatever better suits
-// the task at hand.
-X(node, Mem, nodeid, nodeid) // type, address
-X(node, Ld, nodeid, nodeid) // type, address
-X(node, St, nodeid, nodeid, nodeid) // type, address, value
+// Memory accesses.
+// Mem can be used as a destination or a source operand, and is useful in code generation for CISC
+// ISAs. The optimizer is allowed to move Mem operations around by the same rules that apply to
+// non-volatile memory accesses in C. Ld and St act like Move, with the source and the destination
+// operand, respectively, being indirect. Optimizer is not allowed to move Ld or St in a way that
+// would change their order.
+X(node, Mem, nodeid, nodeid, word) // address, address space, type
+X(wrnode, Ld, nodeid, nodeid, nodeid, word) // destination, address, address space, type
+X(node, St, nodeid, nodeid, nodeid, word) // address, value, address space, type
 
 // When a value must be in a register, it is wrapped in a node Reg. Semantically, a Reg is the same
 // as its first (value) argument. The second argument is an architecture specific key that
@@ -42,7 +38,7 @@ X(node, St, nodeid, nodeid, nodeid) // type, address, value
 // the architecture specific code generator, every Reg node must have a key that specifies a single
 // register. Any Reg nodes coming from the client application are ignored by substituting them with
 // their first (value) arguments; Reg nodes are only meant to be used internally by the library.
-X(purenode, Reg, nodeid, word) // value, key
+X(purenode, Reg, nodeid, word) // value, key (0 is used for any register of the appropriate type)
 
 // Unstructured control flow is used both at the lowest (architecture) level and the highest
 // (application) level. It is intuitive to programmers and maps nicely to how things work in
@@ -91,16 +87,13 @@ X(purenode, Data, word, args) // type of the data (Tuple, Struct, Packed, or Arr
 // calling conventions
 // TODO: figure out how to make use of red zones
 X(node, Invoke, nodeid, args)
-X(node, Enter, nodeid, args) // first argument is the type of the function, i.e. a Fun node; result is an object of the type; args are local variables (types)
+X(node, Enter, nodeid, args) // first argument is the type of the function, i.e. a Fun node; result is an object of the type; args are stack variable types
 X(node, Exit, nodeid) // function to exit
 X(purenode, Arg, nodeid, word) // function whose argument to read, index
 X(purenode, RVal, nodeid) // function
 X(purenode, Slot, nodeid, word) // address of a local variable: function, index
 
-// Register allocator can remove local variables from the frame if they fit into the registers. The
-// Slot nodes that were associated with the removed local variables must be substituted with
-// something else that can be used as the value arguments of the Reg nodes. Temp nodes exist
-// specifically for the purpose. They are meant for internal use of the library only.
+// A temporary variable, used by the library internally. Argument is the type of the variable.
 X(purenode, Temp, nodeid)
 
 // For debugging and implementing garbage collectors and zero-overhead exception handling. The

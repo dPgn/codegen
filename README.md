@@ -1,42 +1,47 @@
 codegen – a dynamic code generation library
 
-This is the first public, and hopefully final, iteration of my dynamic code
-generation library.
-
-The goal of this project is to be a simple, fast, and portable dynamic code
-generation tool for implementing JITs and other dynamic compilers. The
+The goal of this project is to be a simple (header only), fast, and portable dynamic code
+generation tool for implementing JITs and other dynamic compilers in C++. The
 motivation comes from the effort required to use the existing tools. Dynamic
-code generation is inherently complicated, enough. The challenge is not to
+code generation is inherently complicated, enough. The challenge is to not
 make it more complicated than it necessarily has to be.
 
-There are great tools, such as LLVM, if you need extreme performance and
-flexibility. However, very often the order-of-magnitude speed penalty of
-interpreted versus dynamically compiled code is our only concern, and the last
-10% or so that we could theoretically squeeze out of the execution time of the
-generated code justifies neither the effort required to use such a high-end
-compiler backend nor the slow execution of the backend itself.
+The application can pass the IR to be converted to machine code in textual form, or directly generate it using a sort of a DSL-like API:
 
-For this iteration I chose to use Google Test for the first time (ever, for any
-project, so I'm probably doing something 'wrong'). Also, I decided to take a
-strict test driven bottom-up approach, as I find it most suitable for a project
-like this.
+    ir::code code;
 
-In my previous iterations I generated code directly from my intermediate
-representation. This made the code too difficult to read and maintain, so I
-decided to add an assembly layer. It's obvious, when you think about it:
-writing code is much easier than writing code that writes code. If I would
-rather write code in assembly than in hexadecimal, then I most certainly should
-make my code that writes code do it in assembly rather than in hexadecimal.
+    auto i32        = code(ir::Int(-32));
+    auto funtype    = code(ir::Fun(0, i32, i32, i32));
+    auto fun        = code(ir::Enter(funtype));
+    auto arg0       = code(ir::Arg(fun, 0));
+    auto arg1       = code(ir::Arg(fun, 1));
+    auto rval       = code(ir::RVal(fun));
+    auto sum        = code(ir::Add(arg0, arg1));
 
-The planned code generation pipeline looks like this:
+    code(ir::Move(rval, sum));
+    code(ir::Exit(fun));
 
-* program creates code in the intermediate representation
-* basic optimizations are performed (constant propagation, etc.)
-* code is rewritten in a subset of IR supported by the target layer
+The textual IR is somewhat shorter and more compact (but can actually be more cumbersome when code is generated from traversing an AST, for example):
+
+    std::string codetext =
+        "[ fun: Enter [ Fun 0 [ Int -32 ] [ Int -32 ] [ Int -32] ] ]"
+        "[ Move [ RVal fun ] [ Add [ Arg fun 0 ] [ Arg fun 1 ] ] ]"
+        "[ Exit fun ]";
+
+    ir::code code = textual(codetext).code();
+
+The above examples are copy-pasted from test/public_test.h++.
+
+Once complete, the code generation process has following steps:
+
+* program creates code in the intermediate representation, either using DSL implemented by ir::code class directly, or in textual form
+* intermediate representation is internally rewritten in a form more suitable for optimizations
+* parts of the typesystem that aren't natively supported (structures, most importantly) are applied
+* basic optimizations (constant propagation, etc.) – and perhaps also something more advanced (loop optimizations, autovectorization), one day
+* instruction selection rewrites the IR in its RTL form where most native machine instructions are represented as moves
 * register allocation
+* stack frame allocation for variables that did not fit in registers
+* control flow is rewritten in a form that makes sense for code generation, and other small final adjustments are performed
 * target layer generates the native code using the internal "assembler"
-
-I am planning on making daily commits for the next few weeks until the library
-becomes useful for its intended purpose.
 
 Any comments are appreciated.

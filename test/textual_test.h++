@@ -16,8 +16,6 @@
     limitations under the License.
 */
 
-#include "../textual.h++"
-
 // If we feed the string returned by ir::code::text() to the parser, the resulting code should
 // return an identical string.
 TEST(Textual, Minimal)

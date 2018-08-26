@@ -265,7 +265,7 @@ namespace codegen
 
         public:
 
-            void operator()(const ir::code &code, ir::word pos, const ir::node &) { }
+            template<class NODE> void operator()(const ir::code &code, ir::word pos, const NODE &node) { }
 
             void operator()(const ir::code &code, ir::word pos, const ir::Move &node)
             {
@@ -277,18 +277,22 @@ namespace codegen
                     if (src.is<ir::arithmetic>())
                     {
                         if (node[0] != src[0]) (*this)(code, pos, ir::Move(node[0], src[0]));
-                        code.pass_at(gen_integer_arithmetic(_a, node[0]), node[1]);
+                        code.pass_temp(gen_integer_arithmetic(_a, node[0]), node[1]);
                     }
                     else if (src.is<ir::compare>())
                     {
-                        code.pass_at(gen_compare(_a), node[1]);
-                        code.pass_at(gen_setcc(_a, node[0], semantics(code, src[0]).is_signed()), node[1]);
+                        code.pass_temp(gen_compare(_a), node[1]);
+                        code.pass_temp(gen_setcc(_a, node[0], semantics(code, src[0]).is_signed()), node[1]);
                     }
                     else if (dst.is<ir::Reg>())
                     {
+                        if (src.is<ir::Arg()>()) return; // Arguments are never used directly; the destination temporaries of these Moves are
                         auto dreg = ir::x86::integer_reg(dst[1]);
                         if (src.is<ir::Reg>())
-                            _a(MOV(dreg, ir::x86::integer_reg(src[1])));
+                        {
+                            auto sreg = ir::x86::integer_reg(src[1]);
+                            if (dreg.index() != sreg.index()) _a(MOV(dreg, sreg));
+                        }
                         else if (src.is<ir::Imm>())
                             _a(MOV(dreg, src[0]));
                     }
@@ -316,8 +320,8 @@ namespace codegen
                 auto cond = semantics(code, node[1]);
                 if (cond.is<ir::compare>())
                 {
-                    code.pass_at(gen_compare(_a), node[1]);
-                    code.pass_at(gen_jcc(_a, _labels[node[0]], semantics(code, cond[0]).is_signed()), node[1]);
+                    code.pass_temp(gen_compare(_a), node[1]);
+                    code.pass_temp(gen_jcc(_a, _labels[node[0]], semantics(code, cond[0]).is_signed()), node[1]);
                 }
                 else
                 {

@@ -19,7 +19,7 @@
 #ifndef CODEGEN_X86_IR_H
 #define CODEGEN_X86_IR_H
 
-#include "ir.h++"
+#include "semantics.h++"
 #include "x86_asm.h++"
 
 namespace codegen
@@ -37,12 +37,32 @@ namespace codegen
 
             static constexpr bool is_integer_reg(ir::word id)
             {
-                return id >= (3 << 5) && id < ((6 << 5) | 0x16); // TODO: filter out all with bit 4 set apart from 8 bit high half regs
+                // TODO: filter out all with bit 4 set apart from 8 bit high half regs
+                return id >= (3 << 5) && id < ((6 << 5) | 0x10);
+            }
+
+            static constexpr bool is_int_reg_group(ir::word id)
+            {
+                return id >= 3 && id <= 6;
+            }
+
+            static constexpr byte log2bits(ir::word id)
+            {
+                return
+                    is_integer_reg(id)? id >> 5 :
+                    is_int_reg_group(id)? id & 7 :
+                    0;
             }
 
             static constexpr x86::integer_reg integer_reg(ir::word id)
             {
                 return x86::integer_reg(id >> 5, id & 0x1f);
+            }
+
+            template<unsigned BITS> static ir::word reg_group(const semantics &ty)
+            {
+                if (ty.is<Int>()) return std::abs(ty[0]) > 32? 6 : std::abs(ty[0]) > 16? 5 : std::abs(ty[0]) > 8? 4 : 3;
+                else if (ty.is<Ptr>() || ty.is<Fun>()) return BITS == 64? 6 : 5;
             }
         }
     }

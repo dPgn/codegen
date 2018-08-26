@@ -29,6 +29,7 @@
 #include <gtest/gtest.h>
 
 #include "../codegen.h++"
+#include "../textual.h++"
 
 using namespace codegen;
 
@@ -36,6 +37,7 @@ using namespace codegen;
 
 #include "x86_asm_test.h++"
 #include "x86_gen_test.h++"
+#include "x86_rtl_test.h++"
 
 #include "textual_test.h++"
 #include "control_test.h++"

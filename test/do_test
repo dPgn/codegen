@@ -1,6 +1,6 @@
 # this compiles the tests on my Mac; the same should work on Linux
 # You probably don't want the -Wno-all on any platform other than macOS, where
 # the compiler generates absolutely ridiculous warnings by default.
-c++ -std=c++14 -L/usr/local/lib -I/usr/local/include -Wno-all -lgtest -otest main.c++
+c++ -std=c++14 -L/usr/local/lib -I/usr/local/include -Wno-all -ferror-limit=1 -lgtest -otest main.c++
 [ $? -eq 0 ] || exit $?;
 ./test

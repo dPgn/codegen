@@ -151,7 +151,7 @@ namespace codegen
 
             word prev(word pos) const
             {
-                if (pos < 0) return -1;
+                if (pos <= 0) return -1;
                 while (--pos > 0 && (_data[pos - 1] & 0x80));
                 return pos;
             }
@@ -373,6 +373,19 @@ namespace codegen
             {
                 return false;
             }
+
+            bool is_write() const
+            {
+                return false;
+            }
+        };
+
+        struct wrnode : node
+        {
+            bool is_write() const
+            {
+                return true;
+            }
         };
 
         struct purenode : node
@@ -567,9 +580,26 @@ namespace codegen
                 for (word index = 0; index < _buf.size(); pass(f, index));
             }
 
-            template<class F> void pass_at(F f, word index) const
+            template<class F> void pass_at(F &f, word index) const
             {
                 return pass(f, index);
+            }
+
+            template<class F> void pass_temp(F f, word index) const
+            {
+                return pass(f, index);
+            }
+
+            bool prev(ir::word &pos) const
+            {
+                if ((pos = _buf.prev(pos)) < 0) return false;
+                pos -= _buf.read_at(pos);
+                return pos >= 0;
+            }
+
+            template<class F> void rpass(F &f) const
+            {
+                for (ir::word pos = _buf.size(); prev(pos); ) pass_at(f, pos);
             }
 
             word arg(word index, word k) const
