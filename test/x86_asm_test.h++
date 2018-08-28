@@ -35,9 +35,6 @@
     SSE support, at least enough to have the basic floating point arithmetic for now. Full SIMD
     support up to at least AVX2 should, of course, be implemented, but that can be done later. For
     anything better than AVX2 I will need a newer processor.
-
-    Investigate, why the Source = [R13] case in AddressModes crashes when the test program is
-    compiled with any optimizations on (-O, -O2, -Os, -O3).
 */
 
 TEST(X86Asm, PlainReturn)

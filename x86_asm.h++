@@ -341,9 +341,11 @@ namespace codegen
 
             reg_mem(const reg &r)
             {
-                _index = r.index();
+                _base = r.index();
                 _log2bits = _index_log2bits = r.log2bits();
                 _indirect = false;
+                _has_index = false;
+                _has_base = true;
             }
 
             reg_mem(const symbol *displacement)
@@ -356,8 +358,7 @@ namespace codegen
 
             reg_mem(byte seg, byte width, const integer_reg &r, byte shift, const symbol *displacement = nullptr)
             {
-                _index_shift = shift;
-                if (r.index() != 4)
+                if (_index_shift = shift)
                 {
                     _index = r.index();
                     _index_log2bits = r.log2bits();
@@ -428,6 +429,7 @@ namespace codegen
                 copy_from(other);
                 if (_displacement) delete _displacement;
                 if (other._displacement) _displacement = other._displacement->clone();
+                else _displacement = nullptr;
             }
 
             reg_mem &operator=(reg_mem &&other)
@@ -450,12 +452,12 @@ namespace codegen
 
             bool has_sib() const
             {
-                return _indirect && (_has_base || _has_index && (_index == 12 || _index_shift));
+                return _indirect && (_has_index || _has_base && (_base & 7) == 4);
             }
 
             byte modrm() const
             {
-                if (!_indirect) return 0xc0 | _index & 7;
+                if (!_indirect) return 0xc0 | _base & 7;
                 byte nbytes = _displacement? _displacement->nbytes() : 0;
                 if (nbytes > 4) argument_mismatch("Illegal 64 bit displacement");
                 if (has_sib())
@@ -463,10 +465,10 @@ namespace codegen
                     if (nbytes > 1) return 0x84;
                     return nbytes? 0x44 : 4;
                 }
-                else if (_has_index)
+                else if (_has_base)
                 {
-                    if (nbytes > 1) return 0x80 | _index & 7;
-                    return (nbytes || (_index & 7) == 5? 0x40 : 0) | _index & 7;
+                    if (nbytes > 1) return 0x80 | _base & 7;
+                    return (nbytes || (_base & 7) == 5? 0x40 : 0) | _base & 7;
                 }
                 else return nbytes? 5 : 4;
             }
@@ -474,7 +476,7 @@ namespace codegen
             byte displacement_bytes() const
             {
                 byte n = _displacement? _displacement->nbytes() : 0;
-                return  n? n : _has_index && (_index & 7) == 5? 1 : 0;
+                return  n? n : _indirect && _has_base && (_base & 7) == 5? 1 : 0;
             }
 
             void write_sib_and_displacement(std::vector<byte> &code, int section, reloc *rel, const model &m) const

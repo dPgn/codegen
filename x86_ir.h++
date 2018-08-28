@@ -59,9 +59,14 @@ namespace codegen
                 return x86::integer_reg(id >> 5, id & 0x1f);
             }
 
+            static constexpr ir::word int_reg_group(unsigned bits)
+            {
+                return bits > 32? 6 : bits > 16? 5 : bits > 8? 4 : 3;
+            }
+
             template<unsigned BITS> static ir::word reg_group(const semantics &ty)
             {
-                if (ty.is<Int>()) return std::abs(ty[0]) > 32? 6 : std::abs(ty[0]) > 16? 5 : std::abs(ty[0]) > 8? 4 : 3;
+                if (ty.is<Int>()) return int_reg_group(std::abs(ty[0]));
                 else if (ty.is<Ptr>() || ty.is<Fun>()) return BITS == 64? 6 : 5;
             }
         }

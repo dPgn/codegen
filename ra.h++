@@ -156,19 +156,19 @@ namespace codegen
 
             pass_base(ra &owner) : _ra(owner) { }
 
-            void set_reg(ir::word var, ir::word id)
+            ir::word set_reg(ir::word var, ir::word id)
             {
                 ir::word reg = _map.reg(var);
                 if (reg)
                 {
-                    if (_regs.is_perfect(id, reg)) return;
+                    if (_regs.is_perfect(id, reg)) return reg;
                     _regs.forget(reg);
                     _map.drop(var);
                 }
                 if (reg = _regs.get_free(id))
                 {
                     _map.add(var, reg);
-                    return;
+                    return reg;
                 }
                 ir::word to_drop = _map.find_compatible(_regs, id);
                 reg = _map.reg(to_drop);
@@ -177,13 +177,14 @@ namespace codegen
                 if (reg = _regs.get_free(id))
                 {
                     _map.add(var, reg);
-                    return;
+                    return reg;
                 }
                 _regs.get_free(reg);
                 ir::word to_move = _map.find_perfect(_regs, id);
                 ir::word mreg = _map.reg(to_move);
                 _map.move(to_move, reg);
                 _map.add(var, mreg);
+                return mreg;
             }
         };
 
@@ -281,7 +282,13 @@ namespace codegen
                 semantics dst(code, node[0]);
                 auto wr = _ra._writes.find(pos);
                 if (dst.is<ir::Reg>()) set_reg(dst[0], dst[1]);
-                else if (wr != _ra._writes.end()) set_reg(dst.pos(), wr->second);
+                else if (wr != _ra._writes.end())
+                    if (ir::word reg = _regs.get_compatible(wr->second))
+                    {
+                        _map.add(dst.pos(), reg);
+                        wr->second = reg;
+                    }
+                    else set_reg(dst.pos(), wr->second);
             }
 
             void operator()(const ir::code &code, ir::word pos, const ir::Reg &node)

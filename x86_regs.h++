@@ -64,6 +64,13 @@ namespace codegen
                 // TODO: floats and vectors
             }
 
+            ir::word get_compatible(ir::word id)
+            {
+                if (ir::word reg = get_free(id)) return reg;
+                if (ir::x86::is_integer_reg(id)) return get_free(ir::x86::int_reg_group(id));
+                return 0;
+            }
+
             // Returns true if reg is in group. This is used when we need a variable in a register,
             // and it already is in _some_ register. To pick up a register to drop when there is no
             // suitable register available at all, we use is_compatible, which tells us whether a
