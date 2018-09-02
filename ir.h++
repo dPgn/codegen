@@ -689,6 +689,8 @@ namespace codegen
             }
         };
 
+// With the textual representation of the IR, this is entirely unnecessary:
+/*
         class debug_writer
         {
             std::stringstream ss;
@@ -713,6 +715,7 @@ namespace codegen
                 return ss.str();
             }
         };
+*/
     }
 }
 

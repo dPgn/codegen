@@ -54,6 +54,10 @@ namespace codegen
             return (*this)(--_id, node);
         }
 
+        void map(ir::word npos, ir::word opos)
+        {
+            _indices[opos] = _indices[npos];
+        }
     };
 }
 

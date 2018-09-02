@@ -202,8 +202,28 @@ namespace codegen
 
             void operator()(const ir::code &code, ir::word pos, const ir::Move &node)
             {
-                if (semantics(code, node[0]).is<ir::Temp>())
-                    if (ir::word reg = _map.reg(node[0])) _ra._writes[pos] = reg;
+                semantics dst(code, node[0]), src(code, node[1]);
+                if (dst.is<ir::Temp>())
+                {
+                    if (ir::word reg = _map.reg(node[0]))
+                    {
+                        _ra._writes[pos] = reg;
+                        if (src.is<ir::Reg>())
+                        {
+                            _map.drop(node[0]);
+                            _map.add(src[0], reg);
+                        }
+                    }
+                }
+                else if (dst.is<ir::Reg()>() && src.is<ir::Reg()>())
+                {
+                    if (ir::word reg = _map.reg(dst[0]))
+                    {
+                        _ra._writes[pos] = reg;
+                        _map.drop(node[0]);
+                        _map.add(src[0], reg);
+                    }
+                }
             }
 
             void operator()(const ir::code &code, ir::word pos, const ir::Reg &node)

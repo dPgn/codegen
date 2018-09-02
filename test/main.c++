@@ -42,6 +42,8 @@ using namespace codegen;
 #include "textual_test.h++"
 #include "control_test.h++"
 
+#include "public_test.h++"
+
 int main(int argc, char *argv[])
 {
     testing::InitGoogleTest(&argc, argv);
