@@ -31,6 +31,34 @@ The textual IR is somewhat shorter and more compact (but can actually be more cu
     ir::code code = textual(codetext).code();
 
 The above examples are copy-pasted from test/public_test.h++. These cases pass, but are extremely simple.
+They also generate the shortest possible code (5 bytes):
+
+    mov eax, edi    ; 89 F8
+    add eax, esi    ; 01 F0
+    ret             ; C3
+
+There is now a trivial optimizer in simplify.h++. A simple test case in test/simplify_test.h++ verifies that
+
+    [ fun: Enter [ Fun 0 [ Int -32 ] ] ]
+    [ a: Temp [ Int -32] ]
+    [ b: Temp [ Int -32] ]
+    [ c: Temp [ Int -32] ]
+    [ Move a [ Mul [ Cast [ Int -32 ] [ 2 ] ] [ 3 ] ] ]
+    [ s0: SkipIf [ Gt a [ 5 ] ] ]
+    [ Move b [ 4 ] ]
+    [ s1: Skip ]
+    [ Here s0 ]
+    [ Move b a ]
+    [ Here s1 ]
+    [ Move c [ Sub [ Cast [ Int -32 ] [ 13 ] ] b ] ]
+    [ Move [ RVal fun ] [ Mul b c ] ]
+    [ Exit fun ]
+
+becomes
+
+    [ fun: Enter [ Fun 0 [ Int -32 ] ] ]
+    [ Move [ RVal fun ] [ Cast [ Int -32 ] [ 42 ] ] ]
+    [ Exit fun ]
 
 Once complete, the code generation process has following steps:
 
@@ -46,7 +74,6 @@ Once complete, the code generation process has following steps:
 
 A partial list of things to do before codegen can be considered release-ready:
 
-* simplification (optimization step that combines constant propagation, dead code elimination, and trivial common subexpression elimination)
 * completion of the register allocator – it currently does little more than gets the simple tests to pass
 * global symbols and variables as well as a way to call other functions than the one in the beginning of the sole module
 * pointers, aggregate types, etc.
@@ -56,7 +83,7 @@ A partial list of things to do before codegen can be considered release-ready:
 
 Is there any need to support 32 bit x86 still in late 2018? Is someone somewhere still running a 32 bit OS on Intel/AMD?
 I have written the architecture specific part so that 32 bit support would be easy to add, but is it worth the trouble?
-I think AMD support will still need to be both 32 bit and 64 bit once I get around to it.
+I think ARM support will still need to be both 32 bit and 64 bit once I get around to it.
 I want the whole pipleline to run on one architecture first, though, before I implement other targets.
 
 Any comments are appreciated.

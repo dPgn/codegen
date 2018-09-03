@@ -25,6 +25,7 @@
 #include "x86_cc.h++"
 
 #include "control.h++"
+#include "simplify.h++"
 #include "ra.h++"
 
 namespace codegen

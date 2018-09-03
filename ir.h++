@@ -558,6 +558,22 @@ namespace codegen
                 return index < size();
             }
 
+            template<class F> void forward(F &f, word index) const
+            {
+                word pos = index;
+                word nargs = _buf.read(index);
+                switch (_buf.read(index))
+                {
+#               define X(base,name,...) case node_id::name: \
+                    f(pos, name(_buf, index, nargs)); \
+                    break;
+#               include "ir_nodes.def"
+                    default:
+                        // TODO: throw something
+                        ;
+                }
+            }
+
             template<class F> void pass(F &f, word &index) const
             {
                 word pos = index;

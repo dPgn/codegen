@@ -54,6 +54,11 @@ namespace codegen
                 return semantics(code, semantics(code, pos)[0]).type().pos();
             }
 
+            rval operator()(const ir::code &code, ir::word pos, const ir::compare &node) const
+            {
+                return pos;
+            }
+
             rval operator()(const ir::code &code, ir::word pos, const ir::Reg &node) const
             {
                 return semantics(code, node[0]).type().pos();
@@ -75,6 +80,16 @@ namespace codegen
             }
 
             rval operator()(const ir::code &code, ir::word pos, const ir::Enter &node) const
+            {
+                return node[0];
+            }
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::Conv &node) const
+            {
+                return node[0];
+            }
+
+            rval operator()(const ir::code &code, ir::word pos, const ir::Cast &node) const
             {
                 return node[0];
             }
@@ -133,6 +148,12 @@ namespace codegen
         bool is_signed() const
         {
             return _code.query_at(is_signed_query(), _pos);
+        }
+
+        bool is_bool() const
+        {
+            auto ty = type();
+            return ty.is<ir::Int>() && ty[0] == 0 || ty.is<ir::compare>();
         }
     };
 

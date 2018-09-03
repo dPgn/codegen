@@ -179,4 +179,10 @@ namespace codegen
             return _code;
         }
     };
+
+    ir::code parse(std::string text)
+    {
+        ir::code code = textual(text).code();
+        return code;
+    }
 }

@@ -58,6 +58,13 @@ namespace codegen
         {
             _indices[opos] = _indices[npos];
         }
+
+        void reset()
+        {
+            _out.clear();
+            _indices.clear();
+            _id = 0;
+        }
     };
 }
 
