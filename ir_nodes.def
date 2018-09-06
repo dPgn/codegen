@@ -96,6 +96,10 @@ X(purenode, Slot, nodeid, word) // address of a local variable: function, index
 // A temporary variable, used by the library internally. Argument is the type of the variable.
 X(purenode, Temp, nodeid)
 
+// Register allocator passes these operations to the architecture layer. They have no semantical meaning.
+X(node, RMove, word, word) // dst reg, src reg
+X(node, RSwap, word, word) // reg, reg
+
 // For debugging and implementing garbage collectors and zero-overhead exception handling. The
 // second argument of Trace is an application specific key opaque to the codegen library and merely
 // passed to a handler when execution is interrupted to read the values. The third argument is the

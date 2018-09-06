@@ -128,6 +128,11 @@ namespace codegen
                     return 0;
                 }
 
+                rval operator()(const ir::code &code, ir::word pos, const ir::Repeat &node) const
+                {
+                    return pos;
+                }
+
                 rval operator()(const ir::code &code, ir::word pos, const ir::Here &node) const
                 {
                     return node[0];
@@ -188,7 +193,10 @@ namespace codegen
 
                     rval operator()(const ir::code &code, ir::word pos, const ir::Xor &node) const
                     {
-                        return _x ^ _y;
+                        semantics sem(code, pos);
+                        unsigned b = 1;
+                        if (!sem.is_bool()) b = std::abs(sem[0]);
+                        return (_x ^ _y) & ((1ULL << b) - 1);
                     }
 
                     rval operator()(const ir::code &code, ir::word pos, const ir::Eq &node) const
@@ -243,8 +251,7 @@ namespace codegen
                         if (iy != _int_constants.end())
                         {
                             ir::word r = _int_constants[pos] = code.query_at(int_calculator{ ix->second, iy->second }, pos);
-                            /* if (ty.is_bool()) (*_fwd._out)(pos, ir::Imm(r));
-                            else */ (*_fwd._out)(pos, ir::Cast(ty.pos(), _fwd._out->add(ir::Imm(r))));
+                            (*_fwd._out)(pos, ir::Cast(ty.pos(), _fwd._out->add(ir::Imm(r))));
                             _last_pos = pos;
                             return;
                         }

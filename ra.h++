@@ -120,22 +120,40 @@ namespace codegen
             for (auto reg : _regs) regs.get_free(reg.second);
         }
 
-        template<class REGS> ir::word find_perfect(const REGS &regs, ir::word group)
+        template<class REGS> ir::word find_perfect(const REGS &regs, ir::word group) const
         {
             for (unsigned i = 0; i < N; ++i)
             {
                 ir::word var = _vars[(i + _head) % N];
-                if (regs.is_perfect(group, _regs[var])) return var;
+                if (var && regs.is_perfect(group, _regs.at(var))) return var;
             }
+            return 0;
         }
 
-        template<class REGS> ir::word find_compatible(const REGS &regs, ir::word group)
+        template<class REGS> ir::word find_compatible(const REGS &regs, ir::word group) const
         {
             for (unsigned i = 0; i < N; ++i)
             {
                 ir::word var = _vars[(i + _head) % N];
-                if (regs.is_compatible(group, _regs[var])) return var;
+                if (var && regs.is_compatible(group, _regs.at(var))) return var;
             }
+            return 0;
+        }
+
+        template<class ACTION> void change_from(const rmap &other, ACTION action) const
+        {
+            std::map<ir::word, ir::word> common;
+
+            for (unsigned i = 0; i < N; ++i)
+                if (ir::word var = other._vars[i])
+                    if (!contains(var)) action.spill(other.reg(var), var);
+                    else common.emplace(other.reg(var), reg(var));
+
+            action.remap(common);
+
+            for (unsigned i = 0; i < N; ++i)
+                if (ir::word var = _vars[i])
+                    if (other.contains(var)) action.fill(reg(var), var);
         }
     };
 
@@ -148,6 +166,12 @@ namespace codegen
 
         struct pass_base
         {
+            struct do_nothing
+            {
+                void move(ir::word dst, ir::word src) { }
+                void spill(ir::word reg, ir::word var) { }
+            };
+
             ra &_ra;
 
             REGS _regs;
@@ -156,33 +180,37 @@ namespace codegen
 
             pass_base(ra &owner) : _ra(owner) { }
 
-            ir::word set_reg(ir::word var, ir::word id)
+            template<class ACTION = do_nothing> ir::word set_reg(ir::word var, ir::word id, ACTION action = do_nothing())
             {
-                ir::word reg = _map.reg(var);
+                ir::word reg = _map.reg(var), freg, dreg;
                 if (reg)
                 {
                     if (_regs.is_perfect(id, reg)) return reg;
                     _regs.forget(reg);
                     _map.drop(var);
                 }
-                if (reg = _regs.get_free(id))
+                if (freg = _regs.get_free(id))
                 {
-                    _map.add(var, reg);
-                    return reg;
+                    _map.add(var, freg);
+                    if (reg) action.move(freg, reg);
+                    return freg;
                 }
                 ir::word to_drop = _map.find_compatible(_regs, id);
-                reg = _map.reg(to_drop);
-                _regs.forget(reg);
+                dreg = _map.reg(to_drop);
+                _regs.forget(dreg);
                 _map.drop(to_drop);
-                if (reg = _regs.get_free(id))
+                action.spill(dreg, to_drop);
+                if (freg = _regs.get_free(id))
                 {
-                    _map.add(var, reg);
-                    return reg;
+                    _map.add(var, freg);
+                    if (reg) action.move(freg, reg);
+                    return freg;
                 }
-                _regs.get_free(reg);
+                _regs.get_free(dreg);
                 ir::word to_move = _map.find_perfect(_regs, id);
                 ir::word mreg = _map.reg(to_move);
-                _map.move(to_move, reg);
+                _map.move(to_move, dreg);
+                action.move(dreg, mreg);
                 _map.add(var, mreg);
                 return mreg;
             }
@@ -195,6 +223,9 @@ namespace codegen
             using pass_base::_map;
             using pass_base::_edges;
             using pass_base::set_reg;
+
+            std::unordered_map<ir::word, unsigned> _loop_level;
+            unsigned _level;
 
             rev_pass(ra &owner) : pass_base(owner) { }
 
@@ -247,17 +278,25 @@ namespace codegen
             void operator()(const ir::code &code, ir::word pos, const ir::SkipIf &node)
             {
                 _regs.reset();
-                _map.combine(_edges[pos]);
+                if (_loop_level[pos] > _level) _map.combine(_edges[pos]);
+                else
+                {
+                    regmap temp = regmap(_edges[pos]);
+                    temp.combine(_map.compacted());
+                    _map = temp;
+                }
                 _map.assign(_regs);
             }
 
             void operator()(const ir::code &code, ir::word pos, const ir::Forever &node)
             {
+                --_level;
                 _edges[pos] = _map.compacted();
             }
 
             void operator()(const ir::code &code, ir::word pos, const ir::Repeat &node)
             {
+                ++_level;
                 auto edge = _edges.find(node[0]);
                 if (edge != _edges.end())
                 {
@@ -285,6 +324,23 @@ namespace codegen
             }
         };
 
+        struct loop_level_counter
+        {
+            rev_pass &_rev;
+
+            loop_level_counter(rev_pass &rev) : _rev(rev) { }
+
+            template<class NODE> void operator()(const ir::code &code, ir::word pos, const NODE &node)
+            {
+                _rev(code, pos, node);
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Here &node)
+            {
+                _rev._loop_level[node[0]] = _rev._level;
+            }
+        };
+
         struct fwd_pass : pass_base
         {
             using pass_base::_ra;
@@ -293,13 +349,16 @@ namespace codegen
             using pass_base::_edges;
             using pass_base::set_reg;
 
-            fwd_pass(ra &owner) : pass_base(owner) { }
+            rev_pass &_rev;
+            unsigned _level = 0;
+
+            fwd_pass(ra &owner, rev_pass &rev) : pass_base(owner), _rev(rev) { }
 
             void operator()(const ir::code &code, ir::word pos, const ir::node &node) { }
 
-            void operator()(const ir::code &code, ir::word pos, const ir::Move &node)
+            void operator()(const ir::code &code, ir::word pos, const ir::wrnode &node)
             {
-                semantics dst(code, node[0]);
+                semantics dst(code, semantics(code, pos)[0]);
                 auto wr = _ra._writes.find(pos);
                 if (dst.is<ir::Reg>()) set_reg(dst[0], dst[1]);
                 else if (wr != _ra._writes.end())
@@ -338,6 +397,7 @@ namespace codegen
 
             void operator()(const ir::code &code, ir::word pos, const ir::Forever &node)
             {
+                ++_level;
                 regmap temp(_edges[pos]);
                 temp.combine(_map.compacted());
                 _regs.reset();
@@ -347,7 +407,10 @@ namespace codegen
 
             void operator()(const ir::code &code, ir::word pos, const ir::Repeat &node)
             {
+                --_level;
                 _edges[node[0]] = _map.compacted();
+                _regs.reset();
+                _map.clear();
             }
 
             void operator()(const ir::code &code, ir::word pos, const ir::Exit &node)
@@ -365,7 +428,34 @@ namespace codegen
 
         template<class OUT> struct gen_pass
         {
-            fwd_pass _fwd;
+            struct action
+            {
+                gen_pass &_gen;
+
+                action(gen_pass &gen) : _gen(gen) { }
+
+                void remap(const std::map<ir::word, ir::word> &common)
+                {
+                    _gen._fwd._regs.remap(_gen._out, common);
+                }
+
+                void spill(ir::word reg, ir::word var)
+                {
+                    _gen._out(ir::Move(var, _gen._out.add(ir::Reg(var, reg))));
+                }
+
+                void fill(ir::word reg, ir::word var)
+                {
+                    _gen._out(ir::Move(_gen._out.add(ir::Reg(var, reg)), var));
+                }
+
+                void move(ir::word dst, ir::word src)
+                {
+                    _gen._out(ir::RMove(dst, src));
+                }
+            };
+
+            fwd_pass &_fwd;
             remapper<OUT> _out;
 
             gen_pass(OUT &out, fwd_pass &fwd) : _fwd(fwd), _out(remapper<OUT>(out)) { }
@@ -388,24 +478,102 @@ namespace codegen
                 _out(pos, node);
             }
 
+            void operator()(const ir::code &code, ir::word pos, const ir::wrnode &node)
+            {
+                semantics dst(code, semantics(code, pos)[0]);
+                auto wr = _fwd._ra._writes.find(pos);
+                if (dst.is<ir::Reg>()) _fwd.set_reg(dst[0], dst[1], action(*this));
+                else if (wr != _fwd._ra._writes.end())
+                    if (ir::word reg = _fwd._regs.get_compatible(wr->second))
+                    {
+                        _fwd._map.add(dst.pos(), reg);
+                        wr->second = reg;
+                    }
+                    else _fwd.set_reg(dst.pos(), wr->second, action(*this));
+            }
+
             void operator()(const ir::code &code, ir::word pos, const ir::Reg &node)
             {
                 auto rd = _fwd._ra._reads.find(pos);
                 if (rd != _fwd._ra._reads.end()) _out(pos, ir::Reg(node[0], rd->second));
                 else _out(pos, node);
             }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Skip &node)
+            {
+                _fwd._edges[pos] = _fwd._map.compacted();
+                _out(pos, node);
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::SkipIf &node)
+            {
+                /*
+                if (_fwd._rev._loop_level[pos] <= _fwd._level)
+                    _fwd._edges[pos] = _fwd._map.compacted();
+                else
+                {
+                    _fwd._regs.reset();
+                    regmap omap = _fwd._map;
+                    _fwd._map = regmap(_fwd._edges[pos] = _fwd._rev._edges[pos]);
+                    _fwd._map.change_from(omap, action(*this));
+                    _fwd._map.assign(_fwd._regs);
+                }
+                */
+                // TODO: It is entirely possible that the above register shuffling invalidated the
+                // condition of our SkipIf, as the nodes that actually compute the condition come
+                // before the SkipIf node, and the spill/move/fill code is inserted _immediately_
+                // before the SkipIf. This is a critical problem that can produce invalid results
+                // and should, therefore, be fixed ASAP. For now, just do this suboptimally:
+                _fwd._edges[pos] = _fwd._map.compacted(); // fix the above and remove this!!!
+                _out(pos, node);
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Here &node)
+            {
+                semantics skip(code, node[0]);
+                _fwd._regs.reset();
+                regmap omap = _fwd._map;
+                _fwd._map = regmap(_fwd._edges[node[0]]);
+                _fwd._map.change_from(omap, action(*this));
+                _fwd._map.assign(_fwd._regs);
+                _out(pos, node);
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Forever &node)
+            {
+                // TODO: moves, fills, spills
+                ++_fwd._level;
+                regmap temp(_fwd._edges[pos]);
+                temp.combine(_fwd._map.compacted());
+                _fwd._regs.reset();
+                temp.change_from(_fwd._map, action(*this));
+                _fwd._map = temp;
+                _fwd._map.assign(_fwd._regs);
+                _out(pos, node);
+            }
+
+            void operator()(const ir::code &code, ir::word pos, const ir::Repeat &node)
+            {
+                --_fwd._level;
+                regmap(_fwd._edges[pos]).change_from(_fwd._map, action(*this));
+                _fwd._map.clear();
+                _fwd._regs.reset();
+                _out(pos, node);
+                // Nothing is saved here, because the generator pass is the last one by definition.
+            }
         };
 
         template<class OUT> void process(OUT &out, const ir::code &code, unsigned n)
         {
             rev_pass rev(*this);
-            fwd_pass fwd(*this);
+            fwd_pass fwd(*this, rev);
+            loop_level_counter llc(rev);
+            code.rpass(llc);
             while (n--)
             {
-                code.rpass(rev);
                 code.pass(fwd);
+                code.rpass(rev);
             }
-            code.rpass(rev);
             gen_pass<OUT> gen(out, fwd);
             code.pass(gen);
         }

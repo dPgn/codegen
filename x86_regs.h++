@@ -100,6 +100,51 @@ namespace codegen
             {
                 for (unsigned i = 0; i < 16; ++i) _iregs[i] = i == 4 || i == 5;
             }
+
+            template<class GEN> static void remap(GEN &gen, const std::map<ir::word, ir::word> &regs)
+            {
+                // not very efficient...
+                std::map<byte, ir::word> int_regs;
+                for (auto r : regs) if (ir::x86::is_integer_reg(r.first))
+                    int_regs.emplace(ir::x86::integer_reg(r.first).index(), r.second);
+                bool done;
+                do
+                {
+                    done = true;
+                    for (auto r = int_regs.begin(); r != int_regs.end(); )
+                    {
+                        ir::word dst = r->second;
+                        auto dstreg = ir::x86::integer_reg(dst);
+                        byte index = dstreg.index();
+                        if (index == r->first)
+                        {
+                            ++r;
+                            continue;
+                        }
+                        done = false;
+                        if (int_regs.count(index))
+                        {
+                            ++r;
+                            continue;
+                        }
+                        gen(ir::RMove(r->second, ir::x86::id(integer_reg(dstreg.log2bits(), r->first))));
+                        int_regs.emplace(index, dst);
+                        r = int_regs.erase(r);
+                    }
+                }
+                while (!done);
+                for (auto r : int_regs)
+                {
+                    auto x = ir::x86::integer_reg(r.second);
+                    byte index = x.index();
+                    if (index == r.first) continue;
+                    auto r2 = int_regs.find(index);
+                    gen(ir::RSwap(r2->second, r.second));
+                    auto t = r2->second;
+                    r2->second = r.second;
+                    r.second = t;
+                }
+            }
         };
     }
 }

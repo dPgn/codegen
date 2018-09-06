@@ -20,9 +20,9 @@ TEST(Simplify, Basic)
 {
     std::string unsimplified =
         "[ fun: Enter [ Fun 0 [ Int -32 ] ] ]"
-        "[ a: Temp [ Int -32] ]"
-        "[ b: Temp [ Int -32] ]"
-        "[ c: Temp [ Int -32] ]"
+        "[ a: Temp [ Int -32 ] ]"
+        "[ b: Temp [ Int -32 ] ]"
+        "[ c: Temp [ Int -32 ] ]"
         "[ Move a [ Mul [ Cast [ Int -32 ] [ 2 ] ] [ 3 ] ] ]"
         "[ s0: SkipIf [ Gt a [ 5 ] ] ]"
         "[ Move b [ 4 ] ]"
@@ -39,7 +39,8 @@ TEST(Simplify, Basic)
         "[ Move [ RVal fun ] [ Cast [ Int -32 ] [ 42 ] ] ]"
         "[ Exit fun ]";
 
-    std::string result = simplify(parse(unsimplified), 10).text();
+    // 4 passes are enough for this case. Changes to simplifier shouldn't change that.
+    std::string result = simplify(parse(unsimplified), 4).text();
     std::string reference = parse(simplified).text();
 
 //    std::cout << reference << std::endl;
